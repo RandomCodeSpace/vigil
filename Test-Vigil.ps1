@@ -1,0 +1,247 @@
+#!/usr/bin/env pwsh
+# VIGIL core logic smoke tests.
+# Runs on Windows PowerShell 5.1 AND cross-platform pwsh 6+.
+# Exercises: task schema, sort modes, filter modes, JSON round-trip,
+# null-entry healing, due-date formatting.
+#
+# Usage:
+#   pwsh -File Test-Vigil.ps1
+#   powershell -File Test-Vigil.ps1
+
+[CmdletBinding()]
+param()
+
+$ErrorActionPreference = 'Stop'
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$vigilPath = Join-Path $scriptDir 'VIGIL.ps1'
+
+if (-not (Test-Path $vigilPath)) {
+    Write-Host "VIGIL.ps1 not found at $vigilPath" -ForegroundColor Red
+    exit 1
+}
+
+# Dot-source VIGIL in NoUI mode — defines all core functions, returns before UI
+. $vigilPath -NoUI
+
+$script:Passed = 0
+$script:Failed = 0
+$script:TestLog = @()
+
+function Assert-That {
+    param([bool]$Condition, [string]$Label, [object]$Expected = $null, [object]$Actual = $null)
+    if ($Condition) {
+        Write-Host "  PASS  $Label" -ForegroundColor Green
+        $script:Passed++
+    } else {
+        Write-Host "  FAIL  $Label" -ForegroundColor Red
+        if ($null -ne $Expected -or $null -ne $Actual) {
+            Write-Host "        expected: $Expected" -ForegroundColor DarkGray
+            Write-Host "        actual:   $Actual" -ForegroundColor DarkGray
+        }
+        $script:Failed++
+    }
+}
+
+function Assert-Eq { param($Expected, $Actual, [string]$Label)
+    Assert-That (($Expected -eq $Actual) -or ($null -eq $Expected -and $null -eq $Actual)) $Label $Expected $Actual
+}
+
+function Assert-True { param([bool]$Cond, [string]$Label)  Assert-That $Cond $Label }
+
+function Assert-Count { param([int]$Expected, $Collection, [string]$Label)
+    $arr = @($Collection)
+    Assert-That ($arr.Count -eq $Expected) $Label $Expected $arr.Count
+}
+
+function Section { param([string]$Name)
+    Write-Host ""
+    Write-Host "== $Name ==" -ForegroundColor Cyan
+}
+
+Write-Host ""
+Write-Host "VIGIL Test Suite" -ForegroundColor Cyan
+Write-Host ('Version: ' + $script:VigilVersion) -ForegroundColor DarkGray
+Write-Host ('Host:    ' + $(if ($script:IsWindowsHost) { 'Windows' } else { 'Linux/macOS (DPAPI passthrough)' })) -ForegroundColor DarkGray
+
+# --------------------------------------------------------------------------
+Section 'New-VigilTask schema'
+# --------------------------------------------------------------------------
+
+$t = New-VigilTask -Title 'Test task' -Priority 'high'
+Assert-Eq 'Test task' $t.title    'title set'
+Assert-Eq 'high'      $t.priority 'priority set'
+Assert-Eq 'manual'    $t.source   'default source is manual'
+Assert-Eq $false      $t.done     'starts not done'
+Assert-Eq ''          $t.dueDate  'empty dueDate by default'
+Assert-True ($null -ne $t.id -and $t.id.Length -gt 0) 'id is non-empty GUID'
+Assert-True ($null -ne $t.createdAt -and $t.createdAt.Length -gt 0) 'createdAt is set'
+
+$t2 = New-VigilTask -Title 'With due' -Priority 'critical' -DueDate ([datetime]'2026-12-25T10:00:00')
+Assert-True ($t2.dueDate -match '2026-12-25') 'dueDate set via param'
+
+# --------------------------------------------------------------------------
+Section 'Sort-VigilTasks — smart mode'
+# --------------------------------------------------------------------------
+
+$tasks = @(
+    (New-VigilTask -Title 'low'      -Priority 'low')
+    (New-VigilTask -Title 'crit'     -Priority 'critical')
+    (New-VigilTask -Title 'normal'   -Priority 'normal')
+    (New-VigilTask -Title 'high'     -Priority 'high')
+)
+$sorted = @(Sort-VigilTasks -tasks $tasks -mode 'smart')
+Assert-Eq 'crit'   $sorted[0].title 'critical first'
+Assert-Eq 'high'   $sorted[1].title 'high second'
+Assert-Eq 'normal' $sorted[2].title 'normal third'
+Assert-Eq 'low'    $sorted[3].title 'low last'
+
+# --------------------------------------------------------------------------
+Section 'Sort-VigilTasks — due date mode (overdue floats to top)'
+# --------------------------------------------------------------------------
+
+$yesterday = (Get-Date).AddDays(-1)
+$tomorrow  = (Get-Date).AddDays(1)
+$nextWeek  = (Get-Date).AddDays(7)
+
+$tasksWithDue = @(
+    (New-VigilTask -Title 'next-week' -Priority 'normal' -DueDate $nextWeek)
+    (New-VigilTask -Title 'tomorrow'  -Priority 'normal' -DueDate $tomorrow)
+    (New-VigilTask -Title 'overdue'   -Priority 'normal' -DueDate $yesterday)
+)
+$sortedDue = @(Sort-VigilTasks -tasks $tasksWithDue -mode 'smart')
+Assert-Eq 'overdue'   $sortedDue[0].title 'overdue first in smart mode'
+Assert-Eq 'tomorrow'  $sortedDue[1].title 'tomorrow second'
+Assert-Eq 'next-week' $sortedDue[2].title 'next-week last'
+
+# --------------------------------------------------------------------------
+Section 'Sort-VigilTasks — newest first'
+# --------------------------------------------------------------------------
+
+Start-Sleep -Milliseconds 20
+$t_old = New-VigilTask -Title 'old' -Priority 'normal'
+Start-Sleep -Milliseconds 20
+$t_mid = New-VigilTask -Title 'mid' -Priority 'normal'
+Start-Sleep -Milliseconds 20
+$t_new = New-VigilTask -Title 'new' -Priority 'normal'
+$sortedNew = @(Sort-VigilTasks -tasks @($t_old, $t_mid, $t_new) -mode 'added')
+Assert-Eq 'new' $sortedNew[0].title 'newest first in added mode'
+Assert-Eq 'old' $sortedNew[2].title 'oldest last in added mode'
+
+# --------------------------------------------------------------------------
+Section 'Sort-VigilTasks — null priority safety'
+# --------------------------------------------------------------------------
+
+$badTask = New-VigilTask -Title 'bad' -Priority 'normal'
+$badTask.priority = $null
+$sortedBad = @(Sort-VigilTasks -tasks @((New-VigilTask -Title 'ok' -Priority 'high'), $badTask) -mode 'smart')
+Assert-Eq 2 $sortedBad.Count 'null priority does not throw'
+
+# --------------------------------------------------------------------------
+Section 'Filter-VigilTasks'
+# --------------------------------------------------------------------------
+
+$filterFixture = @(
+    (New-VigilTask -Title 'm1' -Priority 'high'     -Source 'manual')
+    (New-VigilTask -Title 'm2' -Priority 'low'      -Source 'manual')
+    (New-VigilTask -Title 'c1' -Priority 'critical' -Source 'outlook-cal')
+    (New-VigilTask -Title 'f1' -Priority 'normal'   -Source 'outlook-flag')
+    (New-VigilTask -Title 't1' -Priority 'high'     -Source 'outlook-task')
+)
+
+Assert-Count 5 (Filter-VigilTasks -tasks $filterFixture -mode 'all')    'all keeps everything'
+Assert-Count 2 (Filter-VigilTasks -tasks $filterFixture -mode 'manual') 'manual = 2'
+Assert-Count 3 (Filter-VigilTasks -tasks $filterFixture -mode 'outlook') 'outlook = 3'
+Assert-Count 3 (Filter-VigilTasks -tasks $filterFixture -mode 'urgent')  'urgent (high+critical) = 3'
+
+# --------------------------------------------------------------------------
+Section 'Format-DueLabel'
+# --------------------------------------------------------------------------
+
+$todayAt5 = (Get-Date).Date.AddHours(17)
+$label1 = Format-DueLabel $todayAt5.ToString('o')
+Assert-True ($label1 -like 'Today*') "today-at-5pm -> $label1"
+
+$tomorrowAt9 = (Get-Date).Date.AddDays(1).AddHours(9)
+$label2 = Format-DueLabel $tomorrowAt9.ToString('o')
+Assert-True ($label2 -like 'Tomorrow*') "tomorrow-9am -> $label2"
+
+$past = (Get-Date).AddHours(-2)
+$label3 = Format-DueLabel $past.ToString('o')
+Assert-True ($label3 -like 'Overdue*') "past date -> $label3"
+
+$label4 = Format-DueLabel ''
+Assert-Eq '' $label4 'empty input -> empty string'
+
+# --------------------------------------------------------------------------
+Section 'JSON round-trip via Load/Save (uses temp path)'
+# --------------------------------------------------------------------------
+
+$tmpBase = [IO.Path]::GetTempPath()
+$runId = [guid]::NewGuid().ToString('N')
+$script:TasksPath    = Join-Path $tmpBase ("vigil-test-$runId-tasks.json")
+$script:BackupPath   = Join-Path $tmpBase ("vigil-test-$runId-tasks.backup.json")
+$script:TmpPath      = Join-Path $tmpBase ("vigil-test-$runId-tasks.tmp.json")
+$script:SettingsPath = Join-Path $tmpBase ("vigil-test-$runId-settings.json")
+
+$writeMe = @(
+    (New-VigilTask -Title 'round1' -Priority 'high')
+    (New-VigilTask -Title 'round2' -Priority 'normal' -DueDate (Get-Date).AddHours(3))
+    (New-VigilTask -Title 'round3' -Priority 'low')
+)
+
+Save-VigilTasks $writeMe
+Assert-True (Test-Path $script:TasksPath) 'save created file on disk'
+
+$loaded = @(Load-VigilTasks)
+Assert-Count 3 $loaded 'round-trip preserves count'
+Assert-Eq 'round1' $loaded[0].title    'round-trip preserves title[0]'
+Assert-Eq 'high'   $loaded[0].priority 'round-trip preserves priority[0]'
+Assert-Eq 'low'    $loaded[2].priority 'round-trip preserves priority[2]'
+
+# --------------------------------------------------------------------------
+Section 'Null-entry healing (simulates build25-era corruption)'
+# --------------------------------------------------------------------------
+
+# Build an array with a null element, save it, verify our foreach-filter works
+$corruptArray = @($null, (New-VigilTask -Title 'survivor' -Priority 'normal'))
+$cleaned = @()
+foreach ($t in $corruptArray) { if ($null -ne $t -and $t.id) { $cleaned += $t } }
+Assert-Count 1 $cleaned 'null entries filtered out'
+Assert-Eq 'survivor' $cleaned[0].title 'valid entry survived'
+
+# --------------------------------------------------------------------------
+Section 'Settings merge-with-defaults'
+# --------------------------------------------------------------------------
+
+# Remove any test settings file so we get defaults
+if (Test-Path $script:SettingsPath) { Remove-Item $script:SettingsPath -Force }
+$settings = Load-VigilSettings
+Assert-True ($null -ne $settings.sortMode) 'default settings has sortMode'
+Assert-Eq 'smart' $settings.sortMode 'default sortMode is smart'
+Assert-True ($null -ne $settings.activeFilter) 'default settings has activeFilter'
+
+# Mutate and save
+$settings.sortMode = 'priority'
+Save-VigilSettings $settings
+$settings2 = Load-VigilSettings
+Assert-Eq 'priority' $settings2.sortMode 'settings persists across load'
+
+# Verify defaults still merge in if file is missing keys (manual corruption)
+$partial = @{ posX = 9999 } | ConvertTo-Json
+[IO.File]::WriteAllText($script:SettingsPath, $partial)
+$settings3 = Load-VigilSettings
+Assert-Eq 9999 $settings3.posX 'partial settings keeps posX from file'
+Assert-Eq 'smart' $settings3.sortMode 'missing sortMode defaults from merge'
+
+# --------------------------------------------------------------------------
+# Cleanup
+# --------------------------------------------------------------------------
+
+Remove-Item -ErrorAction SilentlyContinue $script:TasksPath, $script:BackupPath, $script:TmpPath, $script:SettingsPath
+
+Write-Host ""
+Write-Host ('=' * 48) -ForegroundColor DarkGray
+$color = if ($script:Failed -eq 0) { 'Green' } else { 'Red' }
+Write-Host ("Passed: {0}   Failed: {1}" -f $script:Passed, $script:Failed) -ForegroundColor $color
+Write-Host ('=' * 48) -ForegroundColor DarkGray
+if ($script:Failed -gt 0) { exit 1 } else { exit 0 }

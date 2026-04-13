@@ -8,21 +8,32 @@
 # Usage: powershell -ExecutionPolicy Bypass -WindowStyle Hidden -File .\VIGIL.ps1
 
 [CmdletBinding()]
-param()
+param(
+    [switch]$NoUI    # Define functions only, skip WPF/hotkey/ShowDialog. Used by Test-Vigil.ps1.
+)
 
 # Build stamp - bumped on every commit. Visible in status bar + vigil.log.
 # Format: YYYY-MM-DD HH:MM (UTC)  buildN
-$script:VigilVersion = '2026-04-14 02:30 UTC  build28 ascii-sweep'
+$script:VigilVersion = '2026-04-14 03:10 UTC  build30 overdue-label-fix'
 
 $ErrorActionPreference = 'Stop'
-Add-Type -AssemblyName PresentationFramework
-Add-Type -AssemblyName PresentationCore
-Add-Type -AssemblyName WindowsBase
-Add-Type -AssemblyName System.Security
-Add-Type -AssemblyName System.Windows.Forms
+
+# --- OS detection (allows running core logic on Linux/macOS pwsh for tests) ---
+$script:IsWindowsHost = $true
+if ($PSVersionTable.PSVersion.Major -ge 6) {
+    if ($IsLinux -or $IsMacOS) { $script:IsWindowsHost = $false }
+}
+
+if ($script:IsWindowsHost) {
+    Add-Type -AssemblyName PresentationFramework
+    Add-Type -AssemblyName PresentationCore
+    Add-Type -AssemblyName WindowsBase
+    Add-Type -AssemblyName System.Security
+    Add-Type -AssemblyName System.Windows.Forms
+}
 
 # --- Win32 P/Invoke (foreground tracking + window activation) --------------
-if (-not ([System.Management.Automation.PSTypeName]'VigilWin32').Type) {
+if ($script:IsWindowsHost -and -not ([System.Management.Automation.PSTypeName]'VigilWin32').Type) {
     Add-Type -ErrorAction Stop -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
@@ -37,7 +48,7 @@ public class VigilWin32 {
 }
 
 # --- Hotkey helper (C# bridge so PS avoids HwndSourceHook ref-delegate cast)
-if (-not ([System.Management.Automation.PSTypeName]'VigilHotkey').Type) {
+if ($script:IsWindowsHost -and -not ([System.Management.Automation.PSTypeName]'VigilHotkey').Type) {
     Add-Type -ErrorAction Stop -ReferencedAssemblies PresentationCore, WindowsBase -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
@@ -76,19 +87,23 @@ public static class VigilHotkey {
 "@
 }
 
-# --- Single instance -------------------------------------------------------
-$script:Mutex = New-Object System.Threading.Mutex($false, 'Global\VIGIL_TaskTracker')
-if (-not $script:Mutex.WaitOne(0, $false)) {
-    $h = [VigilWin32]::FindWindow($null, 'VIGIL')
-    if ($h -ne [IntPtr]::Zero) {
-        [VigilWin32]::ShowWindow($h, 9) | Out-Null
-        [VigilWin32]::SetForegroundWindow($h) | Out-Null
+# --- Single instance (Windows UI only; skip on Linux or -NoUI) ------------
+if ($script:IsWindowsHost -and -not $NoUI) {
+    $script:Mutex = New-Object System.Threading.Mutex($false, 'Global\VIGIL_TaskTracker')
+    if (-not $script:Mutex.WaitOne(0, $false)) {
+        $h = [VigilWin32]::FindWindow($null, 'VIGIL')
+        if ($h -ne [IntPtr]::Zero) {
+            [VigilWin32]::ShowWindow($h, 9) | Out-Null
+            [VigilWin32]::SetForegroundWindow($h) | Out-Null
+        }
+        exit 0
     }
-    exit 0
 }
 
 # --- Paths -----------------------------------------------------------------
-$script:VigilDir     = Join-Path $env:USERPROFILE '.vigil'
+$script:UserHome     = [Environment]::GetFolderPath('UserProfile')
+if (-not $script:UserHome) { $script:UserHome = $HOME }
+$script:VigilDir     = Join-Path $script:UserHome '.vigil'
 $script:TasksPath    = Join-Path $script:VigilDir 'tasks.json'
 $script:BackupPath   = Join-Path $script:VigilDir 'tasks.backup.json'
 $script:TmpPath      = Join-Path $script:VigilDir 'tasks.tmp.json'
@@ -110,12 +125,14 @@ try {
     }
 } catch { }
 
-# --- DPAPI wrap / unwrap (required because BitLocker is OFF, preflight #31)
+# --- DPAPI wrap / unwrap (Windows-only; pass-through on Linux/macOS) -------
 function Protect-VigilBytes([byte[]]$plain) {
+    if (-not $script:IsWindowsHost) { return $plain }
     [System.Security.Cryptography.ProtectedData]::Protect(
         $plain, $null, [System.Security.Cryptography.DataProtectionScope]::CurrentUser)
 }
 function Unprotect-VigilBytes([byte[]]$cipher) {
+    if (-not $script:IsWindowsHost) { return $cipher }
     [System.Security.Cryptography.ProtectedData]::Unprotect(
         $cipher, $null, [System.Security.Cryptography.DataProtectionScope]::CurrentUser)
 }
@@ -248,6 +265,7 @@ function Save-VigilSettings($settings) {
 # --- Phase 3: Outlook COM sync --------------------------------------------
 
 function Test-OutlookAvailable {
+    if (-not $script:IsWindowsHost) { return $false }
     $ol = $null
     try {
         $ol = [System.Runtime.InteropServices.Marshal]::GetActiveObject('Outlook.Application')
@@ -272,6 +290,7 @@ function Set-VigilSourceRef {
 }
 
 function Sync-VigilFromOutlook {
+    if (-not $script:IsWindowsHost) { return $false }
     $ol = $null; $ns = $null
     $added = 0; $completed = 0
     try {
@@ -447,6 +466,7 @@ function Sync-VigilFromOutlook {
 # --- Phase 4: Auto-start shortcut + filter helpers -------------------------
 
 function Install-VigilStartupShortcut {
+    if (-not $script:IsWindowsHost) { return }
     try {
         if ($Global:VigilSettings.autoStartInstalled) { return }
         $startupDir = [Environment]::GetFolderPath('Startup')
@@ -537,13 +557,22 @@ function Format-DueLabel([string]$iso) {
         $now = Get-Date
         $today = $now.Date
         $tomorrow = $today.AddDays(1)
+        # Overdue check FIRST so tasks due earlier today don't show "Today 3PM"
+        # when it's already 5PM. Overdue is the more useful signal.
+        if ($d -lt $now) {
+            if ($d.Date -eq $today) { return ('Overdue {0}' -f $d.ToString('h:mm tt')) }
+            return ('Overdue {0}' -f $d.ToString('MMM d'))
+        }
         if ($d.Date -eq $today)    { return ('Today {0}'    -f $d.ToString('h:mm tt')) }
         if ($d.Date -eq $tomorrow) { return ('Tomorrow {0}' -f $d.ToString('h:mm tt')) }
-        if ($d -lt $now)           { return ('Overdue {0}'  -f $d.ToString('MMM d'))  }
         if (($d - $now).Days -lt 7) { return $d.ToString('dddd h:mm tt') }
         return $d.ToString('MMM d')
     } catch { return '' }
 }
+
+# --- Core logic above this line is cross-platform and independent of UI ---
+# Below this line is Windows WPF only. Tests run with -NoUI and return here.
+if ($NoUI -or -not $script:IsWindowsHost) { return }
 
 # --- XAML (custom dark theme, designed from scratch, reduce-motion) --------
 $xaml = @'
