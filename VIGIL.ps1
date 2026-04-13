@@ -13,7 +13,7 @@ param(
 
 # Build stamp - bumped on every commit. Visible in status bar + vigil.log.
 # Format: YYYY-MM-DD HH:MM (UTC)  buildN
-$script:VigilVersion = '2026-04-13 15:50 UTC  build63 script-dir-fallback'
+$script:VigilVersion = '2026-04-13 16:00 UTC  build64 script-dir-storage'
 
 $ErrorActionPreference = 'Stop'
 
@@ -140,18 +140,12 @@ if ($script:IsWindowsHost -and -not $NoUI) {
 }
 
 # --- Paths -----------------------------------------------------------------
-# Storage root priority: OneDrive (Commercial > Consumer > generic) -> UserProfile ($HOME on Linux).
+# Storage root: script directory (.vigil lives next to VIGIL.ps1), falls back to UserProfile.
 $script:UserHome = [Environment]::GetFolderPath('UserProfile')
 if (-not $script:UserHome) { $script:UserHome = $HOME }
 
 function Resolve-VigilStorageRoot {
-    $candidates = @(
-        $env:OneDriveCommercial
-        $env:OneDriveConsumer
-        $env:OneDrive
-    ) | Where-Object { $_ -and (Test-Path $_) }
-    if ($candidates.Count -gt 0) { return $candidates[0] }
-    # Fallback: script directory (co-located tasks/settings next to VIGIL.ps1)
+    # Co-located: .vigil lives next to VIGIL.ps1 so it follows the script wherever it runs.
     $scriptPath = $PSCommandPath
     if (-not $scriptPath) { $scriptPath = $MyInvocation.MyCommand.Path }
     if ($scriptPath) {
