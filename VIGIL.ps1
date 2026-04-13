@@ -56,7 +56,8 @@ function Write-VigilLog([string]$msg) {
 try {
     if ((Test-Path $script:LogPath) -and (Get-Content $script:LogPath).Count -gt 500) {
         $tail = Get-Content $script:LogPath -Tail 500
-        [System.IO.File]::WriteAllLines($script:LogPath, $tail, [System.Text.UTF8Encoding]::new($false))
+        $logUtf8 = New-Object System.Text.UTF8Encoding($false)
+        [System.IO.File]::WriteAllLines($script:LogPath, $tail, $logUtf8)
     }
 } catch { }
 
@@ -79,11 +80,13 @@ function New-VigilTask {
         [string]$Source = 'manual',
         [string]$Notes = ''
     )
+    $dueIso = ''
+    if ($DueDate -gt [datetime]::MinValue) { $dueIso = $DueDate.ToString('o') }
     [pscustomobject]@{
         id        = [guid]::NewGuid().ToString()
         title     = $Title
         priority  = $Priority
-        dueDate   = $(if ($DueDate -gt [datetime]::MinValue) { $DueDate.ToString('o') } else { '' })
+        dueDate   = $dueIso
         source    = $Source
         category  = ''
         notes     = $Notes
@@ -114,10 +117,12 @@ function Load-VigilTasks {
             }
             $parsed = ConvertFrom-Json $json
             $arr = @($parsed)
-            Write-VigilLog "Load: read $($arr.Count) tasks from $path"
+            $lmsg = 'Load: read {0} tasks from {1}' -f $arr.Count, $path
+            Write-VigilLog $lmsg
             return $arr
         } catch {
-            Write-VigilLog "Load FAILED for $path : $($_.Exception.Message)"
+            $lfmsg = 'Load FAILED for {0} : {1}' -f $path, $_.Exception.Message
+            Write-VigilLog $lfmsg
             continue
         }
     }
@@ -138,9 +143,11 @@ function Save-VigilTasks([object[]]$tasks) {
         } else {
             [System.IO.File]::Move($script:TmpPath, $script:TasksPath)
         }
-        Write-VigilLog "Save: wrote $($arr.Count) tasks ($($cipher.Length) bytes cipher)"
+        $msg = 'Save: wrote {0} tasks ({1} bytes cipher)' -f $arr.Count, $cipher.Length
+        Write-VigilLog $msg
     } catch {
-        Write-VigilLog "Save FAILED: $($_.Exception.Message)"
+        $emsg = 'Save FAILED: {0}' -f $_.Exception.Message
+        Write-VigilLog $emsg
         throw
     }
 }
@@ -154,18 +161,21 @@ function Load-VigilSettings {
     }
     if (-not (Test-Path $script:SettingsPath)) { return $default }
     try {
-        $raw = [System.IO.File]::ReadAllText($script:SettingsPath, [System.Text.UTF8Encoding]::new($false))
+        $utf8 = New-Object System.Text.UTF8Encoding($false)
+        $raw = [System.IO.File]::ReadAllText($script:SettingsPath, $utf8)
         return (ConvertFrom-Json $raw)
     } catch {
-        Write-VigilLog "Settings load failed: $($_.Exception.Message)"
+        $smsg = 'Settings load failed: {0}' -f $_.Exception.Message
+        Write-VigilLog $smsg
         return $default
     }
 }
 
 function Save-VigilSettings($settings) {
     $json = ConvertTo-Json -InputObject $settings -Depth 4
-    $bytes = [System.Text.UTF8Encoding]::new($false).GetBytes($json)
-    $tmp = "$script:SettingsPath.tmp"
+    $utf8 = New-Object System.Text.UTF8Encoding($false)
+    $bytes = $utf8.GetBytes($json)
+    $tmp = $script:SettingsPath + '.tmp'
     [System.IO.File]::WriteAllBytes($tmp, $bytes)
     if (Test-Path $script:SettingsPath) {
         [System.IO.File]::Replace($tmp, $script:SettingsPath, $null)
@@ -201,9 +211,9 @@ function Format-DueLabel([string]$iso) {
         $now = Get-Date
         $today = $now.Date
         $tomorrow = $today.AddDays(1)
-        if ($d.Date -eq $today)    { return "Today $($d.ToString('h:mm tt'))" }
-        if ($d.Date -eq $tomorrow) { return "Tomorrow $($d.ToString('h:mm tt'))" }
-        if ($d -lt $now)           { return "Overdue $($d.ToString('MMM d'))" }
+        if ($d.Date -eq $today)    { return ('Today {0}'    -f $d.ToString('h:mm tt')) }
+        if ($d.Date -eq $tomorrow) { return ('Tomorrow {0}' -f $d.ToString('h:mm tt')) }
+        if ($d -lt $now)           { return ('Overdue {0}'  -f $d.ToString('MMM d'))  }
         if (($d - $now).Days -lt 7) { return $d.ToString('dddd h:mm tt') }
         return $d.ToString('MMM d')
     } catch { return '' }
@@ -531,7 +541,7 @@ function Refresh-Render {
     $CountText.Text = "$active"
     $CountBadge.Visibility = if ($active -gt 0) { 'Visible' } else { 'Collapsed' }
     $StatusRight.Text = "$active active"
-    $StatusLeft.Text  = "$(Get-Date -Format 'h:mm tt')"
+    $StatusLeft.Text  = (Get-Date -Format 'h:mm tt')
 }
 
 function Toggle-Done([string]$id, [bool]$done) {
@@ -600,6 +610,7 @@ $window.Add_Closing({
 })
 
 # --- Go --------------------------------------------------------------------
-Write-VigilLog "VIGIL started. $($script:Tasks.Count) tasks loaded."
+$startMsg = 'VIGIL started. {0} tasks loaded.' -f $script:Tasks.Count
+Write-VigilLog $startMsg
 Refresh-Render
 [void]$window.ShowDialog()
