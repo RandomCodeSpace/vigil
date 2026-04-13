@@ -13,7 +13,7 @@ param(
 
 # Build stamp - bumped on every commit. Visible in status bar + vigil.log.
 # Format: YYYY-MM-DD HH:MM (UTC)  buildN
-$script:VigilVersion = '2026-04-14 03:10 UTC  build49 native-caption-buttons'
+$script:VigilVersion = '2026-04-14 03:10 UTC  build50 info-button'
 
 $ErrorActionPreference = 'Stop'
 
@@ -880,8 +880,13 @@ $xaml = @'
                     Margin="0,0,4,0"
                     ToolTip="Sync from Outlook"/>
             <Button x:Name="BtnSort" Content="SMART"
-                    Margin="0,0,6,0"
+                    Margin="0,0,4,0"
                     ToolTip="Sort / Filter"/>
+            <Button x:Name="BtnInfo" Content="&#xE946;"
+                    FontFamily="Segoe MDL2 Assets" FontSize="12"
+                    MinWidth="28" Padding="0"
+                    Margin="0,0,6,0"
+                    ToolTip="Keyboard shortcuts &amp; guide"/>
           </StackPanel>
 
           <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Stretch">
@@ -955,6 +960,7 @@ $BtnCollapse = $window.FindName('BtnCollapse')
 $BtnClose    = $window.FindName('BtnClose')
 $BtnSort     = $window.FindName('BtnSort')
 $BtnSync     = $window.FindName('BtnSync')
+$BtnInfo     = $window.FindName('BtnInfo')
 $TaskArea    = $window.FindName('TaskArea')
 $TaskList    = $window.FindName('TaskList')
 $CountCalText   = $window.FindName('CountCalText')
@@ -1373,8 +1379,9 @@ $welcomeXaml = @'
 '@
 
 function Show-VigilWelcome {
+    param([switch]$Force)
     if (-not $script:IsWindowsHost) { return }
-    if ($Global:VigilSettings.welcomeShown) { return }
+    if (-not $Force -and $Global:VigilSettings.welcomeShown) { return }
     try {
         $wAttr = ''
         if ($script:HasFluent) { $wAttr = 'ThemeMode="System"' }
@@ -1510,6 +1517,7 @@ $BtnCollapse.Add_Click({
         $StatusArea.Visibility = 'Visible'
         $BtnSort.Visibility    = 'Visible'
         $BtnSync.Visibility    = 'Visible'
+        $BtnInfo.Visibility    = 'Visible'
         $window.Opacity = 1.0
         $script:IsCollapsed = $false
     } else {
@@ -1517,6 +1525,7 @@ $BtnCollapse.Add_Click({
         $StatusArea.Visibility = 'Collapsed'
         $BtnSort.Visibility    = 'Collapsed'
         $BtnSync.Visibility    = 'Collapsed'
+        $BtnInfo.Visibility    = 'Collapsed'
         $window.Opacity = 0.65
         $script:IsCollapsed = $true
     }
@@ -1610,6 +1619,9 @@ $BtnSort.Add_Click({
     $sortMenu.Placement = 'Bottom'
     $sortMenu.IsOpen = $true
 })
+
+# Info button shows the welcome / shortcuts dialog on demand
+$BtnInfo.Add_Click({ Show-VigilWelcome -Force })
 
 # Sync button wiring
 # Keyboard nav over task rows: Up/Down move selection, Space toggle done,
