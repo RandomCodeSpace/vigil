@@ -288,7 +288,34 @@ Everything else stays.
 
 ---
 
-## 10. Open Question for the User
+## 10. Priority Color Decision — LOCKED
+
+**Decision: Option B — Apple + one semantic exception.**
+
+- Red (`#ff453a`) is reserved for **critical priority and overdue tasks only**.
+- All other priorities (low / normal / high) use typographic weight and list
+  position, no color.
+- Blue (`#2997ff`) remains the sole interactive accent.
+- This is the same exception Apple itself makes for destructive actions,
+  battery low, and notification badges. One semantic red, one interactive
+  blue, everything else monochrome.
+
+### Concrete application
+
+| Priority | Weight | Color | Left marker |
+|---|---|---|---|
+| Critical | 700 | `#ffffff` title, `#ff453a` due label | 2px `#ff453a` left border |
+| High | 600 | `#ffffff` | none |
+| Normal | 400 | `#ffffff` | none |
+| Low | 400 | `rgba(255,255,255,0.56)` | none |
+| Overdue (any priority) | inherits above | `#ff453a` due label | 2px `#ff453a` left border |
+
+The 2px left border replaces the cyan-spec's 4-color left strip. Only two
+states ever render it: critical and overdue. Everything else is flat.
+
+---
+
+## 11. Archived Open Question
 
 apple.md §7 says *"Don't introduce additional accent colors — the entire
 chromatic budget is spent on blue."* VIGIL's job is to surface urgency at a
