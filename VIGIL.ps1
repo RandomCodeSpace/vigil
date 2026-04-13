@@ -466,22 +466,22 @@ function Build-TaskCard($task) {
 
     $dueRoot = New-Object System.Windows.Controls.MenuItem
     $dueRoot.Header = 'Due'
+
+    $nowDate = (Get-Date).Date
+    $daysToFri = (([int][System.DayOfWeek]::Friday) - [int]$nowDate.DayOfWeek + 7) % 7
+    if ($daysToFri -eq 0) { $daysToFri = 7 }
+    $fridayIso = $nowDate.AddDays($daysToFri).AddHours(17).ToString('o')
+
+    $daysToMon = (([int][System.DayOfWeek]::Monday) - [int]$nowDate.DayOfWeek + 7) % 7
+    if ($daysToMon -eq 0) { $daysToMon = 7 }
+    $mondayIso = $nowDate.AddDays($daysToMon).AddHours(9).ToString('o')
+
     $dueOptions = @(
-        @{ label = 'None';        when = '' }
-        @{ label = 'Today 5 PM';  when = (Get-Date).Date.AddHours(17).ToString('o') }
-        @{ label = 'Tomorrow 9 AM'; when = (Get-Date).Date.AddDays(1).AddHours(9).ToString('o') }
-        @{ label = 'This week (Fri 5 PM)'; when = (
-            $nowDate = (Get-Date).Date
-            $daysToFri = (([int][System.DayOfWeek]::Friday) - [int]$nowDate.DayOfWeek + 7) % 7
-            if ($daysToFri -eq 0) { $daysToFri = 7 }
-            $nowDate.AddDays($daysToFri).AddHours(17).ToString('o')
-        ) }
-        @{ label = 'Next Monday 9 AM'; when = (
-            $nowDate = (Get-Date).Date
-            $daysToMon = (([int][System.DayOfWeek]::Monday) - [int]$nowDate.DayOfWeek + 7) % 7
-            if ($daysToMon -eq 0) { $daysToMon = 7 }
-            $nowDate.AddDays($daysToMon).AddHours(9).ToString('o')
-        ) }
+        @{ label = 'None';                 when = '' }
+        @{ label = 'Today 5 PM';           when = $nowDate.AddHours(17).ToString('o') }
+        @{ label = 'Tomorrow 9 AM';        when = $nowDate.AddDays(1).AddHours(9).ToString('o') }
+        @{ label = 'This week (Fri 5 PM)'; when = $fridayIso }
+        @{ label = 'Next Monday 9 AM';     when = $mondayIso }
     )
     foreach ($opt in $dueOptions) {
         $mi = New-Object System.Windows.Controls.MenuItem
