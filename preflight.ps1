@@ -164,6 +164,7 @@ try {
 
 # 10. Calendar Sort-before-Restrict pattern (Outlook COM gotcha, §1B)
 #     Verifies IncludeRecurrences + Sort + Restrict flow actually returns items.
+$ol = $ns = $cal = $items = $restricted = $null
 try {
     $ol  = New-Object -ComObject Outlook.Application -ErrorAction Stop
     $ns  = $ol.GetNamespace('MAPI')
@@ -177,35 +178,42 @@ try {
     $restricted = $items.Restrict($filter)
     $count = $restricted.Count
     Write-Check 'Calendar Sort-before-Restrict returns items' $true "Next 24h meetings: $count"
-    foreach ($o in @($restricted, $items, $cal, $ns, $ol)) {
-        [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($o)
-    }
-    [GC]::Collect(); [GC]::WaitForPendingFinalizers()
 } catch {
     Write-Check 'Calendar Sort-before-Restrict returns items' $false $_.Exception.Message
+} finally {
+    foreach ($o in @($restricted, $items, $cal, $ns, $ol)) {
+        if ($null -ne $o) {
+            try { [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($o) } catch {}
+        }
+    }
+    [GC]::Collect(); [GC]::WaitForPendingFinalizers()
 }
 
 # 11. Outlook EntryID readable on a flagged email (dedup key, §2E)
+$ol = $ns = $inb = $inbItems = $flagged = $first = $null
 try {
     $ol  = New-Object -ComObject Outlook.Application -ErrorAction Stop
     $ns  = $ol.GetNamespace('MAPI')
     $inb = $ns.GetDefaultFolder(6)
-    $flagged = $inb.Items.Restrict("[FlagStatus] = 2")
+    $inbItems = $inb.Items
+    $flagged = $inbItems.Restrict("[FlagStatus] = 2")
     $hasId = $false
     if ($flagged.Count -gt 0) {
         $first = $flagged.Item(1)
         $hasId = -not [string]::IsNullOrEmpty($first.EntryID)
-        [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($first)
     } else {
         $hasId = $true  # no flagged items is not a failure
     }
-    foreach ($o in @($flagged, $inb, $ns, $ol)) {
-        [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($o)
-    }
-    [GC]::Collect(); [GC]::WaitForPendingFinalizers()
     Write-Check 'Outlook EntryID readable on flagged items' $hasId 'Used as stable dedup key'
 } catch {
     Write-Check 'Outlook EntryID readable on flagged items' $false $_.Exception.Message
+} finally {
+    foreach ($o in @($first, $flagged, $inbItems, $inb, $ns, $ol)) {
+        if ($null -ne $o) {
+            try { [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($o) } catch {}
+        }
+    }
+    [GC]::Collect(); [GC]::WaitForPendingFinalizers()
 }
 
 # 12. Named mutex create/release (single-instance, §1D)
@@ -427,19 +435,28 @@ try {
 }
 
 # 28. Outlook profile is configured for a mailbox (MAPI store present)
+$ol = $ns = $stores = $null
+$releasedStores = @()
 try {
     $ol  = New-Object -ComObject Outlook.Application -ErrorAction Stop
     $ns  = $ol.GetNamespace('MAPI')
     $stores = $ns.Stores
     $count = 0
-    foreach ($s in $stores) { $count++; [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($s) }
-    [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($stores)
-    [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($ns)
-    [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($ol)
-    [GC]::Collect(); [GC]::WaitForPendingFinalizers()
+    foreach ($s in $stores) {
+        $count++
+        $releasedStores += ,$s
+    }
     Write-Check 'Outlook profile has at least one mail store' ($count -ge 1) "$count store(s)"
 } catch {
     Write-Check 'Outlook profile has at least one mail store' $false $_.Exception.Message
+} finally {
+    foreach ($s in $releasedStores) {
+        if ($null -ne $s) { try { [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($s) } catch {} }
+    }
+    foreach ($o in @($stores, $ns, $ol)) {
+        if ($null -ne $o) { try { [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($o) } catch {} }
+    }
+    [GC]::Collect(); [GC]::WaitForPendingFinalizers()
 }
 
 # 29. .NET Framework >= 4.7.2 (WPF transparency + backdrop features)
@@ -530,15 +547,17 @@ try {
 }
 
 # 37. Outlook version + bitness (x64 vs x86 affects COM marshalling choices)
+$ol = $null
 try {
     $ol = New-Object -ComObject Outlook.Application -ErrorAction Stop
     $ver = $ol.Version
     $exe = $ol.Path
-    [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($ol)
-    [GC]::Collect(); [GC]::WaitForPendingFinalizers()
     Write-Check 'Outlook version + install path' $true "v$ver at $exe"
 } catch {
     Write-Check 'Outlook version + install path' $false $_.Exception.Message
+} finally {
+    if ($null -ne $ol) { try { [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($ol) } catch {} }
+    [GC]::Collect(); [GC]::WaitForPendingFinalizers()
 }
 
 # 38. Outlook currently running (affects first-sync latency strategy)
@@ -743,26 +762,33 @@ try {
 # 56. Flagged email count + due-date presence sample.
 #     Tells me how much data Phase 3 flag-sync will handle and whether flags
 #     routinely carry TaskDueDate (affects dueDate mapping fallback).
+$ol = $ns = $inb = $inbItems = $flagged = $null
+$sampleItems = @()
 try {
     $ol  = New-Object -ComObject Outlook.Application -ErrorAction Stop
     $ns  = $ol.GetNamespace('MAPI')
     $inb = $ns.GetDefaultFolder(6)
-    $flagged = $inb.Items.Restrict('[FlagStatus] = 2')
+    $inbItems = $inb.Items
+    $flagged = $inbItems.Restrict('[FlagStatus] = 2')
     $count = $flagged.Count
     $withDue = 0
     $sampleMax = [math]::Min(10, $count)
     for ($i = 1; $i -le $sampleMax; $i++) {
         $it = $flagged.Item($i)
+        $sampleItems += ,$it
         if ($it.TaskDueDate -and $it.TaskDueDate.Year -gt 2000) { $withDue++ }
-        [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($it)
     }
-    foreach ($o in @($flagged, $inb, $ns, $ol)) {
-        [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($o)
-    }
-    [GC]::Collect(); [GC]::WaitForPendingFinalizers()
     Write-Check 'Flagged emails + due-date sample' $true "$count flagged; $withDue/$sampleMax sampled have TaskDueDate"
 } catch {
     Write-Check 'Flagged emails + due-date sample' $false $_.Exception.Message
+} finally {
+    foreach ($it in $sampleItems) {
+        if ($null -ne $it) { try { [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($it) } catch {} }
+    }
+    foreach ($o in @($flagged, $inbItems, $inb, $ns, $ol)) {
+        if ($null -ne $o) { try { [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($o) } catch {} }
+    }
+    [GC]::Collect(); [GC]::WaitForPendingFinalizers()
 }
 
 # 57. Cached Exchange Mode enabled (affects sync latency + offline behavior)
@@ -789,41 +815,42 @@ try {
 }
 
 # 58. Primary SMTP address of the current mailbox (identity for task attribution)
+$ol = $ns = $cu = $ae = $eu = $null
 try {
     $ol = New-Object -ComObject Outlook.Application -ErrorAction Stop
     $ns = $ol.GetNamespace('MAPI')
     $smtp = ''
-    try {
-        $cu = $ns.CurrentUser
-        $ae = $cu.AddressEntry
-        if ($ae -and $ae.Type -eq 'EX') {
-            $eu = $ae.GetExchangeUser()
-            if ($eu) { $smtp = $eu.PrimarySmtpAddress; [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($eu) }
-        } elseif ($ae) {
-            $smtp = $ae.Address
-        }
-        [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($ae)
-        [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($cu)
-    } catch {}
-    foreach ($o in @($ns, $ol)) {
-        [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($o)
+    $cu = $ns.CurrentUser
+    $ae = $cu.AddressEntry
+    if ($ae -and $ae.Type -eq 'EX') {
+        $eu = $ae.GetExchangeUser()
+        if ($eu) { $smtp = $eu.PrimarySmtpAddress }
+    } elseif ($ae) {
+        $smtp = $ae.Address
     }
-    [GC]::Collect(); [GC]::WaitForPendingFinalizers()
     $ok = -not [string]::IsNullOrWhiteSpace($smtp)
     $detail = if ($ok) { "Primary SMTP: $smtp" } else { 'Could not resolve primary SMTP' }
     Write-Check 'Primary SMTP address resolvable' $ok $detail
 } catch {
     Write-Check 'Primary SMTP address resolvable' $false $_.Exception.Message
+} finally {
+    foreach ($o in @($eu, $ae, $cu, $ns, $ol)) {
+        if ($null -ne $o) { try { [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($o) } catch {} }
+    }
+    [GC]::Collect(); [GC]::WaitForPendingFinalizers()
 }
 
 # 59. Mailbox type (Exchange / Exchange Online / IMAP / POP / PST)
 #     Detected from Stores.ExchangeStoreType where available.
+$ol = $ns = $stores = $null
+$enumeratedStores = @()
 try {
     $ol = New-Object -ComObject Outlook.Application -ErrorAction Stop
     $ns = $ol.GetNamespace('MAPI')
     $stores = $ns.Stores
     $types = @()
     foreach ($s in $stores) {
+        $enumeratedStores += ,$s
         $kind = 'Unknown'
         try {
             switch ($s.ExchangeStoreType) {
@@ -835,31 +862,37 @@ try {
             }
         } catch { $kind = 'NotExchange' }
         $types += "$($s.DisplayName)=$kind"
-        [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($s)
     }
-    foreach ($o in @($stores, $ns, $ol)) {
-        [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($o)
-    }
-    [GC]::Collect(); [GC]::WaitForPendingFinalizers()
     Write-Check 'Mailbox store types' $true ($types -join '; ')
 } catch {
     Write-Check 'Mailbox store types' $false $_.Exception.Message
+} finally {
+    foreach ($s in $enumeratedStores) {
+        if ($null -ne $s) { try { [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($s) } catch {} }
+    }
+    foreach ($o in @($stores, $ns, $ol)) {
+        if ($null -ne $o) { try { [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($o) } catch {} }
+    }
+    [GC]::Collect(); [GC]::WaitForPendingFinalizers()
 }
 
 # 60. Unread inbox count (informational — sync volume sizing)
+$ol = $ns = $inb = $inbItems = $null
 try {
     $ol  = New-Object -ComObject Outlook.Application -ErrorAction Stop
     $ns  = $ol.GetNamespace('MAPI')
     $inb = $ns.GetDefaultFolder(6)
+    $inbItems = $inb.Items
     $unread = $inb.UnReadItemCount
-    $total  = $inb.Items.Count
-    foreach ($o in @($inb, $ns, $ol)) {
-        [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($o)
-    }
-    [GC]::Collect(); [GC]::WaitForPendingFinalizers()
+    $total  = $inbItems.Count
     Write-Check 'Inbox size + unread count' $true "$unread unread / $total total"
 } catch {
     Write-Check 'Inbox size + unread count' $false $_.Exception.Message
+} finally {
+    foreach ($o in @($inbItems, $inb, $ns, $ol)) {
+        if ($null -ne $o) { try { [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($o) } catch {} }
+    }
+    [GC]::Collect(); [GC]::WaitForPendingFinalizers()
 }
 
 # --- Summary + compact result string ---
