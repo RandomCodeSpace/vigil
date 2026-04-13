@@ -94,32 +94,54 @@ function New-VigilTask {
 }
 
 function Load-VigilTasks {
-    if (-not (Test-Path $script:TasksPath)) { return @() }
+    if (-not (Test-Path $script:TasksPath)) {
+        Write-VigilLog "Load: no tasks file at $script:TasksPath"
+        return @()
+    }
     foreach ($path in @($script:TasksPath, $script:BackupPath)) {
+        if (-not (Test-Path $path)) { continue }
         try {
             $cipher = [System.IO.File]::ReadAllBytes($path)
-            if ($cipher.Length -eq 0) { return @() }
+            if ($cipher.Length -eq 0) {
+                Write-VigilLog "Load: $path is empty"
+                continue
+            }
             $plain = Unprotect-VigilBytes $cipher
             $json = [System.Text.Encoding]::UTF8.GetString($plain)
-            if ([string]::IsNullOrWhiteSpace($json)) { return @() }
-            return @(ConvertFrom-Json $json)
+            if ([string]::IsNullOrWhiteSpace($json)) {
+                Write-VigilLog "Load: $path decrypted but JSON is empty"
+                continue
+            }
+            $parsed = ConvertFrom-Json $json
+            $arr = @($parsed)
+            Write-VigilLog "Load: read $($arr.Count) tasks from $path"
+            return $arr
         } catch {
-            Write-VigilLog "Load failed for $path : $($_.Exception.Message)"
+            Write-VigilLog "Load FAILED for $path : $($_.Exception.Message)"
             continue
         }
     }
+    Write-VigilLog "Load: both primary and backup failed — returning empty"
     return @()
 }
 
 function Save-VigilTasks([object[]]$tasks) {
-    $json = ConvertTo-Json -InputObject @($tasks) -Depth 6 -Compress
-    $plain = [System.Text.Encoding]::UTF8.GetBytes($json)
-    $cipher = Protect-VigilBytes $plain
-    [System.IO.File]::WriteAllBytes($script:TmpPath, $cipher)
-    if (Test-Path $script:TasksPath) {
-        [System.IO.File]::Replace($script:TmpPath, $script:TasksPath, $script:BackupPath)
-    } else {
-        [System.IO.File]::Move($script:TmpPath, $script:TasksPath)
+    try {
+        $arr = @($tasks)
+        $json = ConvertTo-Json -InputObject $arr -Depth 6 -Compress
+        if ([string]::IsNullOrWhiteSpace($json)) { $json = '[]' }
+        $plain = [System.Text.Encoding]::UTF8.GetBytes($json)
+        $cipher = Protect-VigilBytes $plain
+        [System.IO.File]::WriteAllBytes($script:TmpPath, $cipher)
+        if (Test-Path $script:TasksPath) {
+            [System.IO.File]::Replace($script:TmpPath, $script:TasksPath, $script:BackupPath)
+        } else {
+            [System.IO.File]::Move($script:TmpPath, $script:TasksPath)
+        }
+        Write-VigilLog "Save: wrote $($arr.Count) tasks ($($cipher.Length) bytes cipher)"
+    } catch {
+        Write-VigilLog "Save FAILED: $($_.Exception.Message)"
+        throw
     }
 }
 
@@ -197,9 +219,10 @@ $xaml = @'
         AllowsTransparency="True" Background="Transparent"
         Topmost="True" ShowInTaskbar="False"
         TextOptions.TextFormattingMode="Ideal"
-        TextOptions.TextRenderingMode="ClearType"
+        TextOptions.TextRenderingMode="Grayscale"
         UseLayoutRounding="True"
-        FontFamily="Segoe UI Variable Text, Segoe UI">
+        SnapsToDevicePixels="True"
+        FontFamily="Segoe UI">
   <Window.Resources>
     <SolidColorBrush x:Key="SurfaceBase"   Color="#000000"/>
     <SolidColorBrush x:Key="SurfaceGlass"  Color="#CC000000"/>
@@ -239,10 +262,8 @@ $xaml = @'
     </Style>
   </Window.Resources>
 
-  <Border CornerRadius="12" Background="{StaticResource SurfaceBase}">
-    <Border.Effect>
-      <DropShadowEffect Color="#000000" BlurRadius="30" ShadowDepth="5" Opacity="0.5"/>
-    </Border.Effect>
+  <Border CornerRadius="12" Background="{StaticResource SurfaceBase}"
+          BorderBrush="#33FFFFFF" BorderThickness="1" Margin="8">
     <Grid>
       <Grid.RowDefinitions>
         <RowDefinition Height="44"/>
@@ -270,8 +291,8 @@ $xaml = @'
                          Foreground="{StaticResource TextPrimary}"/>
             </Border>
             <StackPanel Grid.Column="2" Orientation="Horizontal">
-              <Button x:Name="BtnCollapse" Content="—" Style="{StaticResource TitleBarButton}"/>
-              <Button x:Name="BtnClose"    Content="✕" Style="{StaticResource TitleBarButton}"/>
+              <Button x:Name="BtnCollapse" Content="&#xE921;" FontFamily="Segoe MDL2 Assets" FontSize="10" Style="{StaticResource TitleBarButton}" ToolTip="Minimize"/>
+              <Button x:Name="BtnClose"    Content="&#xE8BB;" FontFamily="Segoe MDL2 Assets" FontSize="10" Style="{StaticResource TitleBarButton}" ToolTip="Close"/>
             </StackPanel>
           </Grid>
         </Border>
@@ -429,17 +450,50 @@ function Build-TaskCard($task) {
     $grid.Children.Add($stack) | Out-Null
     $border.Child = $grid
 
-    # Context menu
+    # Context menu — priority, due date, delete
     $menu = New-Object System.Windows.Controls.ContextMenu
+
+    $prioRoot = New-Object System.Windows.Controls.MenuItem
+    $prioRoot.Header = 'Priority'
     foreach ($p in 'low','normal','high','critical') {
         $mi = New-Object System.Windows.Controls.MenuItem
-        $mi.Header = "Priority: $p"
+        $mi.Header = $p
         $mi.Tag = @{ id = $task.id; action = 'priority'; value = $p }
         $mi.Add_Click({ Handle-ContextAction $this.Tag })
-        $menu.Items.Add($mi) | Out-Null
+        $prioRoot.Items.Add($mi) | Out-Null
     }
-    $sep = New-Object System.Windows.Controls.Separator
-    $menu.Items.Add($sep) | Out-Null
+    $menu.Items.Add($prioRoot) | Out-Null
+
+    $dueRoot = New-Object System.Windows.Controls.MenuItem
+    $dueRoot.Header = 'Due'
+    $dueOptions = @(
+        @{ label = 'None';        when = '' }
+        @{ label = 'Today 5 PM';  when = (Get-Date).Date.AddHours(17).ToString('o') }
+        @{ label = 'Tomorrow 9 AM'; when = (Get-Date).Date.AddDays(1).AddHours(9).ToString('o') }
+        @{ label = 'This week (Fri 5 PM)'; when = (
+            $nowDate = (Get-Date).Date
+            $daysToFri = (([int][System.DayOfWeek]::Friday) - [int]$nowDate.DayOfWeek + 7) % 7
+            if ($daysToFri -eq 0) { $daysToFri = 7 }
+            $nowDate.AddDays($daysToFri).AddHours(17).ToString('o')
+        ) }
+        @{ label = 'Next Monday 9 AM'; when = (
+            $nowDate = (Get-Date).Date
+            $daysToMon = (([int][System.DayOfWeek]::Monday) - [int]$nowDate.DayOfWeek + 7) % 7
+            if ($daysToMon -eq 0) { $daysToMon = 7 }
+            $nowDate.AddDays($daysToMon).AddHours(9).ToString('o')
+        ) }
+    )
+    foreach ($opt in $dueOptions) {
+        $mi = New-Object System.Windows.Controls.MenuItem
+        $mi.Header = $opt.label
+        $mi.Tag = @{ id = $task.id; action = 'due'; value = $opt.when }
+        $mi.Add_Click({ Handle-ContextAction $this.Tag })
+        $dueRoot.Items.Add($mi) | Out-Null
+    }
+    $menu.Items.Add($dueRoot) | Out-Null
+
+    $menu.Items.Add((New-Object System.Windows.Controls.Separator)) | Out-Null
+
     $delItem = New-Object System.Windows.Controls.MenuItem
     $delItem.Header = 'Delete'
     $delItem.Tag = @{ id = $task.id; action = 'delete' }
@@ -496,6 +550,9 @@ function Handle-ContextAction($tag) {
     } elseif ($action -eq 'priority') {
         $t = $script:Tasks | Where-Object { $_.id -eq $id }
         if ($t) { $t.priority = $tag.value }
+    } elseif ($action -eq 'due') {
+        $t = $script:Tasks | Where-Object { $_.id -eq $id }
+        if ($t) { $t.dueDate = $tag.value }
     }
     Save-VigilTasks $script:Tasks
     Refresh-Render
