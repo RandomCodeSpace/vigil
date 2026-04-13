@@ -13,7 +13,7 @@ param(
 
 # Build stamp - bumped on every commit. Visible in status bar + vigil.log.
 # Format: YYYY-MM-DD HH:MM (UTC)  buildN
-$script:VigilVersion = '2026-04-14 03:10 UTC  build56 default-typography'
+$script:VigilVersion = '2026-04-14 03:10 UTC  build57 segoe-ui-everywhere'
 
 $ErrorActionPreference = 'Stop'
 
@@ -815,6 +815,7 @@ $xaml = @'
         TextOptions.TextRenderingMode="Grayscale"
         UseLayoutRounding="True"
         SnapsToDevicePixels="True"
+        FontFamily="Segoe UI"
        >
 
   <Border x:Name="OuterFrame" CornerRadius="0" Background="Transparent"
@@ -1324,6 +1325,7 @@ $editPromptXaml = @'
         TextOptions.TextFormattingMode="Ideal"
         TextOptions.TextRenderingMode="Grayscale"
         UseLayoutRounding="True" SnapsToDevicePixels="True"
+        FontFamily="Segoe UI"
        
         WindowStartupLocation="Manual">
   <StackPanel Margin="20">
@@ -1350,7 +1352,7 @@ $welcomeXaml = @'
         Topmost="True" ShowInTaskbar="False"
         TextOptions.TextFormattingMode="Ideal"
         UseLayoutRounding="True"
-       
+        FontFamily="Segoe UI"
         WindowStartupLocation="CenterScreen">
   <StackPanel Margin="28,24,28,20">
     <TextBlock Text="VIGIL" FontSize="14" FontWeight="Bold" Opacity="0.7"/>
@@ -1788,6 +1790,7 @@ $quickAddXaml = @'
         TextOptions.TextFormattingMode="Ideal"
         TextOptions.TextRenderingMode="Grayscale"
         UseLayoutRounding="True" SnapsToDevicePixels="True"
+        FontFamily="Segoe UI"
        
         WindowStartupLocation="Manual">
   <StackPanel Margin="20">
