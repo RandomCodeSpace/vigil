@@ -13,7 +13,7 @@ param(
 
 # Build stamp - bumped on every commit. Visible in status bar + vigil.log.
 # Format: YYYY-MM-DD HH:MM (UTC)  buildN
-$script:VigilVersion = '2026-04-14 03:10 UTC  build43 fluent-everywhere'
+$script:VigilVersion = '2026-04-14 03:10 UTC  build44 net9-thememode'
 
 $ErrorActionPreference = 'Stop'
 
@@ -31,29 +31,18 @@ if ($script:IsWindowsHost) {
     Add-Type -AssemblyName System.Windows.Forms
 }
 
-# --- Win32 P/Invoke (foreground tracking + window activation + DWM Mica) ---
+# --- Win32 P/Invoke (foreground tracking + window activation) --------------
+# Mica/Fluent is delegated to .NET 9 WPF's built-in ThemeMode="Dark" - no DWM code needed.
 if ($script:IsWindowsHost -and -not ([System.Management.Automation.PSTypeName]'VigilWin32').Type) {
     Add-Type -ErrorAction Stop -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
-[StructLayout(LayoutKind.Sequential)]
-public struct VigilMargins {
-    public int cxLeftWidth;
-    public int cxRightWidth;
-    public int cyTopHeight;
-    public int cyBottomHeight;
-}
 public class VigilWin32 {
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     public static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
     [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
     [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
-    // DWM backdrop APIs (Win11 22000+, .NET 9+ WPF)
-    [DllImport("dwmapi.dll")]
-    public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
-    [DllImport("dwmapi.dll")]
-    public static extern int DwmExtendFrameIntoClientArea(IntPtr hWnd, ref VigilMargins pMarInset);
 }
 "@
 }
@@ -656,26 +645,6 @@ function Sync-VigilFromOutlook {
 
 # --- Phase 4: Auto-start shortcut + filter helpers -------------------------
 
-function Apply-VigilFluentBackdrop($targetWindow, [int]$backdropType = 2) {
-    # Helper: apply Mica (2 = MainWindow) or Acrylic (3 = TransientWindow)
-    # backdrop to any WPF window. Safe no-op if Fluent not supported.
-    if (-not $script:HasFluent) { return }
-    try {
-        $h = (New-Object System.Windows.Interop.WindowInteropHelper($targetWindow)).Handle
-        if ($h -eq [IntPtr]::Zero) { return }
-        $dark = 1
-        [void][VigilWin32]::DwmSetWindowAttribute($h, 20, [ref]$dark, 4)
-        $m = New-Object VigilMargins
-        $m.cxLeftWidth = -1; $m.cxRightWidth = -1; $m.cyTopHeight = -1; $m.cyBottomHeight = -1
-        [void][VigilWin32]::DwmExtendFrameIntoClientArea($h, [ref]$m)
-        $bt = $backdropType
-        [void][VigilWin32]::DwmSetWindowAttribute($h, 38, [ref]$bt, 4)
-    } catch {
-        $em = 'Apply-VigilFluentBackdrop failed: ' + $_.Exception.Message
-        Write-VigilLog $em
-    }
-}
-
 function Find-VigilPwshExe {
     # Prefer pwsh 7.x over Windows PowerShell 5.1 for Fluent support.
     $candidates = @()
@@ -816,7 +785,7 @@ $xaml = @'
         Title="VIGIL"
         Width="360" SizeToContent="Height"
         WindowStyle="None" ResizeMode="NoResize"
-        AllowsTransparency="False" Background="{x:Null}"
+        AllowsTransparency="False" Background="{x:Null}" {{THEMEMODE}}
         Topmost="True" ShowInTaskbar="False"
         TextOptions.TextFormattingMode="Ideal"
         TextOptions.TextRenderingMode="Grayscale"
@@ -1057,7 +1026,12 @@ $xaml = @'
 '@
 
 # --- Load XAML -------------------------------------------------------------
-[xml]$xml = $xaml
+# Inject ThemeMode="Dark" on .NET 9+ to enable Fluent theme + Mica backdrop.
+# On older hosts the attribute is stripped so XAML still parses.
+$themeAttr = ''
+if ($script:HasFluent) { $themeAttr = 'ThemeMode="Dark"' }
+$xamlReady = $xaml.Replace('{{THEMEMODE}}', $themeAttr)
+[xml]$xml = $xamlReady
 $reader = New-Object System.Xml.XmlNodeReader $xml
 $window = [Windows.Markup.XamlReader]::Load($reader)
 
@@ -1356,7 +1330,7 @@ $editPromptXaml = @'
         Title="VIGIL - Edit"
         Width="440" SizeToContent="Height"
         WindowStyle="None" ResizeMode="NoResize"
-        AllowsTransparency="False" Background="{x:Null}"
+        AllowsTransparency="False" Background="{x:Null}" {{THEMEMODE}}
         Topmost="True" ShowInTaskbar="False"
         TextOptions.TextFormattingMode="Ideal"
         TextOptions.TextRenderingMode="Grayscale"
@@ -1395,7 +1369,10 @@ function Show-VigilEditPrompt {
         if (-not $task) { return }
         $prevFg = [VigilWin32]::GetForegroundWindow()
 
-        [xml]$ex = $editPromptXaml
+        $eAttr = ''
+        if ($script:HasFluent) { $eAttr = 'ThemeMode="Dark"' }
+        $eReady = $editPromptXaml.Replace('{{THEMEMODE}}', $eAttr)
+        [xml]$ex = $eReady
         $ereader = New-Object System.Xml.XmlNodeReader $ex
         $ewin = [Windows.Markup.XamlReader]::Load($ereader)
 
@@ -1447,7 +1424,6 @@ function Show-VigilEditPrompt {
             if ($prevFg -ne [IntPtr]::Zero) { [VigilWin32]::SetForegroundWindow($prevFg) | Out-Null }
         }.GetNewClosure())
 
-        $ewin.Add_SourceInitialized({ Apply-VigilFluentBackdrop -targetWindow $ewin -backdropType 3 }.GetNewClosure())
         $ewin.Show()
         $ewin.Activate() | Out-Null
         $text.Focus() | Out-Null
@@ -1625,7 +1601,7 @@ $quickAddXaml = @'
         Title="VIGIL - New task"
         Width="460" SizeToContent="Height"
         WindowStyle="None" ResizeMode="NoResize"
-        AllowsTransparency="False" Background="{x:Null}"
+        AllowsTransparency="False" Background="{x:Null}" {{THEMEMODE}}
         Topmost="True" ShowInTaskbar="False"
         TextOptions.TextFormattingMode="Ideal"
         TextOptions.TextRenderingMode="Grayscale"
@@ -1674,7 +1650,10 @@ function Show-QuickAdd {
             if ($clip.Length -gt 200) { $clip = $clip.Substring(0, 200) }
         }
 
-        [xml]$qx = $quickAddXaml
+        $qAttr = ''
+        if ($script:HasFluent) { $qAttr = 'ThemeMode="Dark"' }
+        $qReady = $quickAddXaml.Replace('{{THEMEMODE}}', $qAttr)
+        [xml]$qx = $qReady
         $qreader = New-Object System.Xml.XmlNodeReader $qx
         $qwin = [Windows.Markup.XamlReader]::Load($qreader)
 
@@ -1827,7 +1806,6 @@ function Show-QuickAdd {
             }
         }.GetNewClosure())
 
-        $qwin.Add_SourceInitialized({ Apply-VigilFluentBackdrop -targetWindow $qwin -backdropType 3 }.GetNewClosure())
         $qwin.Show()
         $qwin.Activate() | Out-Null
         $txtTitle.Focus() | Out-Null
@@ -1849,58 +1827,18 @@ $script:HotkeyRegistered = $false
     }
 })
 
-# --- Fluent / Mica: dark title bar + Mica backdrop (Win11, .NET 9+ only) ---
+# --- Fluent status label (actual Fluent/Mica comes from ThemeMode in XAML) ---
 $window.Add_Loaded({
     try {
-        $h = (New-Object System.Windows.Interop.WindowInteropHelper($window)).Handle
-        # Always try the dark title bar (works on Win10 2004+ with .NET 4.8+, safe on older)
-        $dark = 1
-        [void][VigilWin32]::DwmSetWindowAttribute($h, 20, [ref]$dark, 4)
         if ($script:HasFluent) {
-            # Check Windows system transparency preference - Mica is invisible if off
-            $transOn = 1
-            try {
-                $kT = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize'
-                $transOn = (Get-ItemProperty -Path $kT -Name EnableTransparency -ErrorAction Stop).EnableTransparency
-            } catch {}
-            Write-VigilLog ('Fluent: EnableTransparency reg = {0}' -f $transOn)
-
-            # Mica needs an extended frame to draw on. Sheet-of-glass = (-1,-1,-1,-1).
-            $margins = New-Object VigilMargins
-            $margins.cxLeftWidth = -1
-            $margins.cxRightWidth = -1
-            $margins.cyTopHeight = -1
-            $margins.cyBottomHeight = -1
-            $efRc = [VigilWin32]::DwmExtendFrameIntoClientArea($h, [ref]$margins)
-            Write-VigilLog ('Fluent: DwmExtendFrame rc = 0x{0:X}' -f $efRc)
-
-            # DWMSBT_MAINWINDOW = 2 -> Mica backdrop tinted by desktop wallpaper
-            $backdrop = 2
-            $rc = [VigilWin32]::DwmSetWindowAttribute($h, 38, [ref]$backdrop, 4)
-            if ($rc -eq 0) {
-                Write-VigilLog 'Fluent: Mica backdrop applied'
-                # Semi-transparent chrome so Mica is visible through title/add/status bars
-                $chromeBrush = New-Object System.Windows.Media.SolidColorBrush(
-                    [System.Windows.Media.Color]::FromArgb(140, 22, 22, 22))
-                try { $TitleBar.Background   = $chromeBrush } catch {}
-                try { $AddArea.Background    = $chromeBrush } catch {}
-                try { $StatusArea.Background = $chromeBrush } catch {}
-                if ($FluentLabel) {
-                    if ($transOn -eq 0) { $FluentLabel.Text = 'MICA(t:off)' }
-                    else { $FluentLabel.Text = 'MICA' }
-                }
-            } else {
-                $rcMsg = 'Fluent: Mica DWM call returned 0x{0:X}' -f $rc
-                Write-VigilLog $rcMsg
-                if ($FluentLabel) { $FluentLabel.Text = ('ERR ' + ('{0:X}' -f $rc)) }
-            }
+            Write-VigilLog 'Fluent: ThemeMode=Dark active (Mica handled by .NET 9 WPF)'
+            if ($FluentLabel) { $FluentLabel.Text = 'FLUENT' }
         } else {
-            $dmsg = 'Fluent: not available | ' + $script:FluentDiag
-            Write-VigilLog $dmsg
+            Write-VigilLog ('Fluent: not available | ' + $script:FluentDiag)
             if ($FluentLabel) { $FluentLabel.Text = 'FLAT' }
         }
     } catch {
-        $em = 'Fluent setup error: ' + $_.Exception.Message
+        $em = 'Fluent label update failed: ' + $_.Exception.Message
         Write-VigilLog $em
     }
 })
