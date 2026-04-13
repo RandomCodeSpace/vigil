@@ -13,7 +13,7 @@ param(
 
 # Build stamp - bumped on every commit. Visible in status bar + vigil.log.
 # Format: YYYY-MM-DD HH:MM (UTC)  buildN
-$script:VigilVersion = '2026-04-14 03:10 UTC  build55 modern-fonts'
+$script:VigilVersion = '2026-04-14 03:10 UTC  build56 default-typography'
 
 $ErrorActionPreference = 'Stop'
 
@@ -815,7 +815,7 @@ $xaml = @'
         TextOptions.TextRenderingMode="Grayscale"
         UseLayoutRounding="True"
         SnapsToDevicePixels="True"
-        FontFamily="Segoe UI Variable Text, Segoe UI">
+       >
 
   <Border x:Name="OuterFrame" CornerRadius="0" Background="Transparent"
           BorderThickness="0">
@@ -841,11 +841,11 @@ $xaml = @'
                     VerticalAlignment="Center" MinWidth="44" ToolTip="Calendar items">
               <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                 <TextBlock Text="CAL " FontSize="9" FontWeight="Bold" Opacity="0.75"
-                           FontFamily="Cascadia Mono, Cascadia Code, Consolas, Courier New"
+                          
                            Foreground="{DynamicResource TextOnAccentFillColorPrimaryBrush}"
                            VerticalAlignment="Center"/>
                 <TextBlock x:Name="CountCalText" Text="0" FontSize="9" FontWeight="Bold"
-                           FontFamily="Cascadia Mono, Cascadia Code, Consolas, Courier New"
+                          
                            Foreground="{DynamicResource TextOnAccentFillColorPrimaryBrush}"
                            VerticalAlignment="Center"/>
               </StackPanel>
@@ -856,11 +856,11 @@ $xaml = @'
                     VerticalAlignment="Center" MinWidth="44" ToolTip="Tasks">
               <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                 <TextBlock Text="TASK " FontSize="9" FontWeight="Bold" Opacity="0.75"
-                           FontFamily="Cascadia Mono, Cascadia Code, Consolas, Courier New"
+                          
                            Foreground="{DynamicResource TextFillColorPrimaryBrush}"
                            VerticalAlignment="Center"/>
                 <TextBlock x:Name="CountTaskText" Text="0" FontSize="9" FontWeight="Bold"
-                           FontFamily="Cascadia Mono, Cascadia Code, Consolas, Courier New"
+                          
                            Foreground="{DynamicResource TextFillColorPrimaryBrush}"
                            VerticalAlignment="Center"/>
               </StackPanel>
@@ -870,10 +870,10 @@ $xaml = @'
                     VerticalAlignment="Center" MinWidth="44" ToolTip="Critical / overdue tasks">
               <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                 <TextBlock Text="CRIT " FontSize="9" FontWeight="Bold" Opacity="0.85"
-                           FontFamily="Cascadia Mono, Cascadia Code, Consolas, Courier New"
+                          
                            Foreground="#FFFFFF" VerticalAlignment="Center"/>
                 <TextBlock x:Name="CountCritText" Text="0" FontSize="9" FontWeight="Bold"
-                           FontFamily="Cascadia Mono, Cascadia Code, Consolas, Courier New"
+                          
                            Foreground="#FFFFFF" VerticalAlignment="Center"/>
               </StackPanel>
             </Border>
@@ -882,10 +882,10 @@ $xaml = @'
                     VerticalAlignment="Center" MinWidth="44" ToolTip="High priority tasks">
               <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                 <TextBlock Text="HIGH " FontSize="9" FontWeight="Bold" Opacity="0.85"
-                           FontFamily="Cascadia Mono, Cascadia Code, Consolas, Courier New"
+                          
                            Foreground="#000000" VerticalAlignment="Center"/>
                 <TextBlock x:Name="CountHighText" Text="0" FontSize="9" FontWeight="Bold"
-                           FontFamily="Cascadia Mono, Cascadia Code, Consolas, Courier New"
+                          
                            Foreground="#000000" VerticalAlignment="Center"/>
               </StackPanel>
             </Border>
@@ -894,15 +894,15 @@ $xaml = @'
           <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
             <Button x:Name="BtnSync" Content="SYNC"
                     Height="22" Padding="8,0" FontSize="9"
-                    FontFamily="Cascadia Mono, Cascadia Code, Consolas, Courier New"
+                   
                     Margin="0,0,4,0" ToolTip="Sync from Outlook"/>
             <Button x:Name="BtnSort" Content="SMART"
                     Height="22" Padding="8,0" FontSize="9"
-                    FontFamily="Cascadia Mono, Cascadia Code, Consolas, Courier New"
+                   
                     Margin="0,0,4,0" ToolTip="Sort / Filter"/>
             <Button x:Name="BtnFilter" Content="ALL"
                     Height="22" Padding="8,0" FontSize="9"
-                    FontFamily="Cascadia Mono, Cascadia Code, Consolas, Courier New"
+                   
                     ToolTip="Filter tasks"/>
           </StackPanel>
         </Grid>
@@ -916,7 +916,7 @@ $xaml = @'
                    VerticalContentAlignment="Center"
                    ToolTip="Filter tasks by title or notes (Ctrl+F)"/>
           <TabControl x:Name="TaskTabs" Background="Transparent" BorderThickness="0">
-            <TabItem Header="TASKS" FontFamily="Cascadia Mono, Cascadia Code, Consolas, Courier New" FontSize="10">
+            <TabItem Header="TASKS" FontSize="10">
               <ScrollViewer MaxHeight="400" VerticalScrollBarVisibility="Auto"
                             HorizontalScrollBarVisibility="Disabled" Padding="0,2,0,0">
                 <ItemsControl x:Name="TaskList">
@@ -928,7 +928,7 @@ $xaml = @'
                 </ItemsControl>
               </ScrollViewer>
             </TabItem>
-            <TabItem Header="CALENDAR" FontFamily="Cascadia Mono, Cascadia Code, Consolas, Courier New" FontSize="10">
+            <TabItem Header="CALENDAR" FontSize="10">
               <ScrollViewer MaxHeight="400" VerticalScrollBarVisibility="Auto"
                             HorizontalScrollBarVisibility="Disabled" Padding="0,2,0,0">
                 <ItemsControl x:Name="CalList">
@@ -950,11 +950,11 @@ $xaml = @'
               CornerRadius="0" Padding="12,5">
         <Grid>
           <TextBlock x:Name="StatusLeft" Text="" FontSize="9"
-                     FontFamily="Cascadia Mono, Cascadia Code, Consolas, Courier New"
+                    
                      Foreground="{DynamicResource TextFillColorTertiaryBrush}"
                      VerticalAlignment="Center" HorizontalAlignment="Left"/>
           <TextBlock x:Name="StatusRight" Text="" FontSize="9"
-                     FontFamily="Cascadia Mono, Cascadia Code, Consolas, Courier New"
+                    
                      Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                      VerticalAlignment="Center" HorizontalAlignment="Right"/>
         </Grid>
@@ -1324,7 +1324,7 @@ $editPromptXaml = @'
         TextOptions.TextFormattingMode="Ideal"
         TextOptions.TextRenderingMode="Grayscale"
         UseLayoutRounding="True" SnapsToDevicePixels="True"
-        FontFamily="Segoe UI Variable Text, Segoe UI"
+       
         WindowStartupLocation="Manual">
   <StackPanel Margin="20">
     <TextBlock x:Name="EditLabel" Text="Edit" FontSize="16" FontWeight="SemiBold"
@@ -1350,10 +1350,10 @@ $welcomeXaml = @'
         Topmost="True" ShowInTaskbar="False"
         TextOptions.TextFormattingMode="Ideal"
         UseLayoutRounding="True"
-        FontFamily="Segoe UI Variable Text, Segoe UI"
+       
         WindowStartupLocation="CenterScreen">
   <StackPanel Margin="28,24,28,20">
-    <TextBlock Text="VIGIL" FontFamily="Cascadia Mono, Cascadia Code, Consolas" FontSize="14" FontWeight="Bold" Opacity="0.7"/>
+    <TextBlock Text="VIGIL" FontSize="14" FontWeight="Bold" Opacity="0.7"/>
     <TextBlock Text="Always watching. Always ready." FontSize="22" FontWeight="SemiBold" Margin="0,4,0,16"/>
     <TextBlock TextWrapping="Wrap" Margin="0,0,0,18" Opacity="0.85"
                Text="A keyboard-first task tracker that lives on your screen. Here is what you need to know:"/>
@@ -1370,17 +1370,17 @@ $welcomeXaml = @'
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="Auto"/>
       </Grid.RowDefinitions>
-      <TextBlock Grid.Row="0" Grid.Column="0" Text="Ctrl+Win+A" FontFamily="Cascadia Mono, Cascadia Code, Consolas" FontWeight="SemiBold" Margin="0,4"/>
+      <TextBlock Grid.Row="0" Grid.Column="0" Text="Ctrl+Win+A" FontWeight="SemiBold" Margin="0,4"/>
       <TextBlock Grid.Row="0" Grid.Column="1" Text="Capture a task from any app" Margin="0,4"/>
-      <TextBlock Grid.Row="1" Grid.Column="0" Text="Ctrl+F" FontFamily="Cascadia Mono, Cascadia Code, Consolas" FontWeight="SemiBold" Margin="0,4"/>
+      <TextBlock Grid.Row="1" Grid.Column="0" Text="Ctrl+F" FontWeight="SemiBold" Margin="0,4"/>
       <TextBlock Grid.Row="1" Grid.Column="1" Text="Filter the list by text" Margin="0,4"/>
-      <TextBlock Grid.Row="2" Grid.Column="0" Text="Up / Down" FontFamily="Cascadia Mono, Cascadia Code, Consolas" FontWeight="SemiBold" Margin="0,4"/>
+      <TextBlock Grid.Row="2" Grid.Column="0" Text="Up / Down" FontWeight="SemiBold" Margin="0,4"/>
       <TextBlock Grid.Row="2" Grid.Column="1" Text="Move the selection" Margin="0,4"/>
-      <TextBlock Grid.Row="3" Grid.Column="0" Text="Space" FontFamily="Cascadia Mono, Cascadia Code, Consolas" FontWeight="SemiBold" Margin="0,4"/>
+      <TextBlock Grid.Row="3" Grid.Column="0" Text="Space" FontWeight="SemiBold" Margin="0,4"/>
       <TextBlock Grid.Row="3" Grid.Column="1" Text="Toggle done on selected task" Margin="0,4"/>
-      <TextBlock Grid.Row="4" Grid.Column="0" Text="Enter" FontFamily="Cascadia Mono, Cascadia Code, Consolas" FontWeight="SemiBold" Margin="0,4"/>
+      <TextBlock Grid.Row="4" Grid.Column="0" Text="Enter" FontWeight="SemiBold" Margin="0,4"/>
       <TextBlock Grid.Row="4" Grid.Column="1" Text="Edit selected task title" Margin="0,4"/>
-      <TextBlock Grid.Row="5" Grid.Column="0" Text="Delete" FontFamily="Cascadia Mono, Cascadia Code, Consolas" FontWeight="SemiBold" Margin="0,4"/>
+      <TextBlock Grid.Row="5" Grid.Column="0" Text="Delete" FontWeight="SemiBold" Margin="0,4"/>
       <TextBlock Grid.Row="5" Grid.Column="1" Text="Remove the selected task" Margin="0,4"/>
     </Grid>
     <TextBlock TextWrapping="Wrap" Margin="0,16,0,16" Opacity="0.7" FontSize="12"
@@ -1788,7 +1788,7 @@ $quickAddXaml = @'
         TextOptions.TextFormattingMode="Ideal"
         TextOptions.TextRenderingMode="Grayscale"
         UseLayoutRounding="True" SnapsToDevicePixels="True"
-        FontFamily="Segoe UI Variable Text, Segoe UI"
+       
         WindowStartupLocation="Manual">
   <StackPanel Margin="20">
     <TextBlock Text="New task" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,12"/>
