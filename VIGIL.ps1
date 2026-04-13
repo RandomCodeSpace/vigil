@@ -13,7 +13,7 @@ param(
 
 # Build stamp - bumped on every commit. Visible in status bar + vigil.log.
 # Format: YYYY-MM-DD HH:MM (UTC)  buildN
-$script:VigilVersion = '2026-04-14 03:10 UTC  build38 prefer-pwsh7'
+$script:VigilVersion = '2026-04-14 03:10 UTC  build39 net9-refasm-fix'
 
 $ErrorActionPreference = 'Stop'
 
@@ -85,7 +85,12 @@ if ($script:IsWindowsHost) {
 
 # --- Hotkey helper (C# bridge so PS avoids HwndSourceHook ref-delegate cast)
 if ($script:IsWindowsHost -and -not ([System.Management.Automation.PSTypeName]'VigilHotkey').Type) {
-    Add-Type -ErrorAction Stop -ReferencedAssemblies PresentationCore, WindowsBase -TypeDefinition @"
+    # Use exact paths of already-loaded WPF assemblies. On PS 7.5 + .NET 9,
+    # passing short names "PresentationCore,WindowsBase" mixes net9 PresentationCore
+    # with .NET Framework 4.0 WindowsBase and the compiler throws CS1705.
+    $wbPath = [System.Windows.Threading.Dispatcher].Assembly.Location
+    $pcPath = [System.Windows.Media.Color].Assembly.Location
+    Add-Type -ErrorAction Stop -ReferencedAssemblies $wbPath, $pcPath -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
 using System.Windows.Interop;
