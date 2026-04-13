@@ -13,7 +13,7 @@ param(
 
 # Build stamp - bumped on every commit. Visible in status bar + vigil.log.
 # Format: YYYY-MM-DD HH:MM (UTC)  buildN
-$script:VigilVersion = '2026-04-14 03:10 UTC  build46 search-keynav-welcome'
+$script:VigilVersion = '2026-04-14 03:10 UTC  build47 system-theme-grouped'
 
 $ErrorActionPreference = 'Stop'
 
@@ -32,7 +32,7 @@ if ($script:IsWindowsHost) {
 }
 
 # --- Win32 P/Invoke (foreground tracking + window activation) --------------
-# Mica/Fluent is delegated to .NET 9 WPF's built-in ThemeMode="Dark" - no DWM code needed.
+# Mica/Fluent is delegated to .NET 9 WPF's built-in ThemeMode="System" - no DWM code needed.
 if ($script:IsWindowsHost -and -not ([System.Management.Automation.PSTypeName]'VigilWin32').Type) {
     Add-Type -ErrorAction Stop -TypeDefinition @"
 using System;
@@ -836,7 +836,6 @@ $xaml = @'
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="Auto"/>
-        <RowDefinition Height="Auto"/>
       </Grid.RowDefinitions>
 
       <!-- Title bar -->
@@ -882,14 +881,12 @@ $xaml = @'
           </StackPanel>
 
           <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center">
-            <Button x:Name="BtnCollapse" ToolTip="Minimize">
-              <Path Data="M0,0 L8,0" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                    StrokeThickness="1.2" StrokeStartLineCap="Flat" StrokeEndLineCap="Flat"/>
-            </Button>
-            <Button x:Name="BtnClose" ToolTip="Close" Margin="1,0,0,0">
-              <Path Data="M0,0 L8,8 M8,0 L0,8" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                    StrokeThickness="1.2" StrokeStartLineCap="Flat" StrokeEndLineCap="Flat"/>
-            </Button>
+            <Button x:Name="BtnCollapse" Content="_" ToolTip="Minimize"
+                    FontFamily="Consolas" FontSize="14" FontWeight="Bold"
+                    Padding="8,0" MinWidth="28" MinHeight="24"/>
+            <Button x:Name="BtnClose" Content="X" ToolTip="Close" Margin="2,0,0,0"
+                    FontFamily="Consolas" FontSize="12" FontWeight="Bold"
+                    Padding="8,0" MinWidth="28" MinHeight="24"/>
           </StackPanel>
         </Grid>
       </Border>
@@ -914,23 +911,8 @@ $xaml = @'
         </DockPanel>
       </Border>
 
-      <!-- Inline add: flat input with bottom hairline, no box -->
-      <Border Grid.Row="2" x:Name="AddArea" Background="Transparent"
-              BorderBrush="{StaticResource Divider}" BorderThickness="0,1,0,0" Padding="12,8">
-        <Grid>
-          <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="*"/>
-            <ColumnDefinition Width="Auto"/>
-          </Grid.ColumnDefinitions>
-          <TextBox Grid.Column="0" x:Name="AddInput" FontSize="13"
-                   VerticalContentAlignment="Center"/>
-          <Button Grid.Column="1" x:Name="BtnAdd" Content="Add"
-                  Margin="8,0,0,0" MinWidth="60"/>
-        </Grid>
-      </Border>
-
       <!-- Status bar: monospace, tight -->
-      <Border Grid.Row="3" x:Name="StatusArea" Background="Transparent"
+      <Border Grid.Row="2" x:Name="StatusArea" Background="Transparent"
               BorderBrush="{StaticResource Divider}" BorderThickness="0,1,0,0"
               CornerRadius="0" Padding="12,5">
         <Grid>
@@ -950,10 +932,10 @@ $xaml = @'
 '@
 
 # --- Load XAML -------------------------------------------------------------
-# Inject ThemeMode="Dark" on .NET 9+ to enable Fluent theme + Mica backdrop.
+# Inject ThemeMode="System" on .NET 9+ to enable Fluent theme + Mica backdrop.
 # On older hosts the attribute is stripped so XAML still parses.
 $themeAttr = ''
-if ($script:HasFluent) { $themeAttr = 'ThemeMode="Dark"' }
+if ($script:HasFluent) { $themeAttr = 'ThemeMode="System"' }
 $xamlReady = $xaml.Replace('{{THEMEMODE}}', $themeAttr)
 [xml]$xml = $xamlReady
 $reader = New-Object System.Xml.XmlNodeReader $xml
@@ -969,9 +951,6 @@ $BtnSort     = $window.FindName('BtnSort')
 $BtnSync     = $window.FindName('BtnSync')
 $TaskArea    = $window.FindName('TaskArea')
 $TaskList    = $window.FindName('TaskList')
-$AddArea     = $window.FindName('AddArea')
-$AddInput    = $window.FindName('AddInput')
-$BtnAdd      = $window.FindName('BtnAdd')
 $CountText   = $window.FindName('CountText')
 $CountBadge  = $window.FindName('CountBadge')
 $StatusArea  = $window.FindName('StatusArea')
@@ -1024,9 +1003,7 @@ function Build-TaskCard($task) {
     } else {
         $border.Background = [System.Windows.Media.Brushes]::Transparent
     }
-    $dividerBrush = Get-VigilBrush 'DividerStrokeColorDefaultBrush' ([System.Windows.Media.Color]::FromRgb(31,31,31))
-    $border.BorderBrush = $dividerBrush
-    $border.BorderThickness = New-Object System.Windows.Thickness(0,0,0,1)
+    $border.BorderThickness = New-Object System.Windows.Thickness(0)
     $border.Cursor = [System.Windows.Input.Cursors]::Hand
     $border.Tag = $task.id
     # Click on a card to select it
@@ -1043,11 +1020,11 @@ function Build-TaskCard($task) {
     if ($task.priority -eq 'critical' -or $isOverdue) {
         $critBrush = Get-VigilBrush 'SystemFillColorCriticalBrush' ([System.Windows.Media.Color]::FromRgb(255,59,48))
         $border.BorderBrush = $critBrush
-        $border.BorderThickness = New-Object System.Windows.Thickness(3,0,0,1)
+        $border.BorderThickness = New-Object System.Windows.Thickness(3,0,0,0)
     } elseif ($task.priority -eq 'high') {
         $warnBrush = Get-VigilBrush 'SystemFillColorCautionBrush' ([System.Windows.Media.Color]::FromRgb(255,159,10))
         $border.BorderBrush = $warnBrush
-        $border.BorderThickness = New-Object System.Windows.Thickness(3,0,0,1)
+        $border.BorderThickness = New-Object System.Windows.Thickness(3,0,0,0)
     }
 
     $grid = New-Object System.Windows.Controls.Grid
@@ -1218,9 +1195,43 @@ function Refresh-Render {
     if ($Global:VigilSettings.sortMode) { $sortMode = [string]$Global:VigilSettings.sortMode }
     $sorted = Sort-VigilTasks -tasks $tasks -mode $sortMode
 
+    # Group sorted tasks by source category and render with section headers.
+    # Order: Calendar -> Flagged -> Outlook tasks -> Manual.
+    $buckets = @{
+        'outlook-cal'  = @()
+        'outlook-flag' = @()
+        'outlook-task' = @()
+        'manual'       = @()
+    }
     foreach ($t in $sorted) {
-        $card = Build-TaskCard $t
-        $TaskList.Items.Add($card) | Out-Null
+        $key = 'manual'
+        if ($t.source -and $buckets.ContainsKey([string]$t.source)) { $key = [string]$t.source }
+        $buckets[$key] += $t
+    }
+    $sectionOrder = @(
+        @{ key = 'outlook-cal';  label = 'CALENDAR' }
+        @{ key = 'outlook-flag'; label = 'FLAGGED EMAILS' }
+        @{ key = 'outlook-task'; label = 'OUTLOOK TASKS' }
+        @{ key = 'manual';       label = 'TASKS' }
+    )
+    $isFirst = $true
+    foreach ($section in $sectionOrder) {
+        $items = $buckets[$section.key]
+        if (-not $items -or $items.Count -eq 0) { continue }
+        $hdr = New-Object System.Windows.Controls.TextBlock
+        $hdr.Text = $section.label
+        $hdr.FontFamily = New-Object System.Windows.Media.FontFamily('Consolas')
+        $hdr.FontSize = 10
+        $hdr.FontWeight = 'Bold'
+        $hdr.Opacity = 0.55
+        $topMargin = if ($isFirst) { 8 } else { 14 }
+        $hdr.Margin = New-Object System.Windows.Thickness(14, $topMargin, 14, 4)
+        $TaskList.Items.Add($hdr) | Out-Null
+        foreach ($t in $items) {
+            $card = Build-TaskCard $t
+            $TaskList.Items.Add($card) | Out-Null
+        }
+        $isFirst = $false
     }
     $active = @($Global:VigilTasks | Where-Object { -not $_.done }).Count
     $CountText.Text = [string]$active
@@ -1353,7 +1364,7 @@ function Show-VigilWelcome {
     if ($Global:VigilSettings.welcomeShown) { return }
     try {
         $wAttr = ''
-        if ($script:HasFluent) { $wAttr = 'ThemeMode="Dark"' }
+        if ($script:HasFluent) { $wAttr = 'ThemeMode="System"' }
         $wReady = $welcomeXaml.Replace('{{THEMEMODE}}', $wAttr)
         [xml]$wx = $wReady
         $wreader = New-Object System.Xml.XmlNodeReader $wx
@@ -1387,7 +1398,7 @@ function Show-VigilEditPrompt {
         $prevFg = [VigilWin32]::GetForegroundWindow()
 
         $eAttr = ''
-        if ($script:HasFluent) { $eAttr = 'ThemeMode="Dark"' }
+        if ($script:HasFluent) { $eAttr = 'ThemeMode="System"' }
         $eReady = $editPromptXaml.Replace('{{THEMEMODE}}', $eAttr)
         [xml]$ex = $eReady
         $ereader = New-Object System.Xml.XmlNodeReader $ex
@@ -1465,7 +1476,6 @@ $script:IsCollapsed = $false
 $BtnCollapse.Add_Click({
     if ($script:IsCollapsed) {
         $TaskArea.Visibility   = 'Visible'
-        $AddArea.Visibility    = 'Visible'
         $StatusArea.Visibility = 'Visible'
         $BtnSort.Visibility    = 'Visible'
         $BtnSync.Visibility    = 'Visible'
@@ -1473,7 +1483,6 @@ $BtnCollapse.Add_Click({
         $script:IsCollapsed = $false
     } else {
         $TaskArea.Visibility   = 'Collapsed'
-        $AddArea.Visibility    = 'Collapsed'
         $StatusArea.Visibility = 'Collapsed'
         $BtnSort.Visibility    = 'Collapsed'
         $BtnSync.Visibility    = 'Collapsed'
@@ -1539,6 +1548,17 @@ foreach ($opt in $filterModes) {
 
 $sortMenu.Items.Add((New-Object System.Windows.Controls.Separator)) | Out-Null
 & $addHeader 'ACTIONS'
+
+$showDoneMi = New-Object System.Windows.Controls.MenuItem
+$showDoneMi.Header = 'Show completed tasks'
+$showDoneMi.IsCheckable = $true
+$showDoneMi.IsChecked = [bool]$Global:VigilSettings.showCompleted
+$showDoneMi.Add_Click({
+    $Global:VigilSettings.showCompleted = -not [bool]$Global:VigilSettings.showCompleted
+    Save-VigilSettings $Global:VigilSettings
+    Refresh-Render
+})
+$sortMenu.Items.Add($showDoneMi) | Out-Null
 
 $exportMi = New-Object System.Windows.Controls.MenuItem
 $exportMi.Header = 'Copy all as markdown'
@@ -1665,20 +1685,6 @@ $BtnSync.Add_Click({
     }
 })
 
-$AddFn = {
-    $txt = $AddInput.Text.Trim()
-    if (-not $txt) { return }
-    $new = New-VigilTask -Title $txt -Priority 'normal'
-    $Global:VigilTasks = @($Global:VigilTasks) + @($new)
-    Save-VigilTasks $Global:VigilTasks
-    $AddInput.Text = ''
-    Refresh-Render
-}
-$BtnAdd.Add_Click($AddFn)
-$AddInput.Add_KeyDown({
-    param($s,$e)
-    if ($e.Key -eq 'Return') { & $AddFn; $e.Handled = $true }
-})
 
 $window.Add_Closing({
     $Global:VigilSettings.posX = [int]$window.Left
@@ -1746,7 +1752,7 @@ function Show-QuickAdd {
         }
 
         $qAttr = ''
-        if ($script:HasFluent) { $qAttr = 'ThemeMode="Dark"' }
+        if ($script:HasFluent) { $qAttr = 'ThemeMode="System"' }
         $qReady = $quickAddXaml.Replace('{{THEMEMODE}}', $qAttr)
         [xml]$qx = $qReady
         $qreader = New-Object System.Xml.XmlNodeReader $qx
