@@ -13,7 +13,7 @@ param(
 
 # Build stamp - bumped on every commit. Visible in status bar + vigil.log.
 # Format: YYYY-MM-DD HH:MM (UTC)  buildN
-$script:VigilVersion = '2026-04-14 03:10 UTC  build50 info-button'
+$script:VigilVersion = '2026-04-14 03:10 UTC  build51 close-in-context-menu'
 
 $ErrorActionPreference = 'Stop'
 
@@ -890,11 +890,8 @@ $xaml = @'
           </StackPanel>
 
           <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Stretch">
-            <Button x:Name="BtnCollapse" Content="&#xE921;" ToolTip="Minimize"
-                    FontFamily="Segoe MDL2 Assets" FontSize="10"
-                    Width="46" Padding="0" Background="Transparent" BorderThickness="0"
-                    Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
-            <Button x:Name="BtnClose" Content="&#xE8BB;" ToolTip="Close"
+            <Button x:Name="BtnCollapse" Content="&#xE921;"
+                    ToolTip="Toggle compact (right-click for menu)"
                     FontFamily="Segoe MDL2 Assets" FontSize="10"
                     Width="46" Padding="0" Background="Transparent" BorderThickness="0"
                     Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
@@ -957,7 +954,6 @@ $FluentLabel = $window.FindName('FluentLabel')
 $TitleBar    = $window.FindName('TitleBar')
 $SearchInput = $window.FindName('SearchInput')
 $BtnCollapse = $window.FindName('BtnCollapse')
-$BtnClose    = $window.FindName('BtnClose')
 $BtnSort     = $window.FindName('BtnSort')
 $BtnSync     = $window.FindName('BtnSync')
 $BtnInfo     = $window.FindName('BtnInfo')
@@ -1483,35 +1479,43 @@ function Show-VigilEditPrompt {
 }
 
 # --- Event wiring ----------------------------------------------------------
-$TitleBar.Add_MouseLeftButtonDown({ $window.DragMove() })
-
-# Native-style caption button hover: subtle on minimize, red on close
+# Hover brush for the minimize / compact button
 $captionHoverBrush = New-Object System.Windows.Media.SolidColorBrush(
     [System.Windows.Media.Color]::FromArgb(40, 128, 128, 128))
-$closeHoverBrush = New-Object System.Windows.Media.SolidColorBrush(
-    [System.Windows.Media.Color]::FromRgb(232, 17, 35))
-$closeHoverFg = [System.Windows.Media.Brushes]::White
-
 $BtnCollapse.Add_MouseEnter({ $BtnCollapse.Background = $captionHoverBrush })
-$BtnCollapse.Add_MouseLeave({ $BtnCollapse.ClearValue([System.Windows.Controls.Control]::BackgroundProperty); $BtnCollapse.Background = [System.Windows.Media.Brushes]::Transparent })
-$BtnClose.Add_MouseEnter({
-    $BtnClose.Background = $closeHoverBrush
-    $BtnClose.Foreground = $closeHoverFg
-})
-$BtnClose.Add_MouseLeave({
-    $BtnClose.Background = [System.Windows.Media.Brushes]::Transparent
-    $BtnClose.ClearValue([System.Windows.Controls.Control]::ForegroundProperty)
-})
+$BtnCollapse.Add_MouseLeave({ $BtnCollapse.Background = [System.Windows.Media.Brushes]::Transparent })
 
-$BtnClose.Add_Click({
+# Right-click context menu on the compact button -> Close (and Show, About)
+$collapseMenu = New-Object System.Windows.Controls.ContextMenu
+$miAbout = New-Object System.Windows.Controls.MenuItem
+$miAbout.Header = 'Shortcuts...'
+$miAbout.Add_Click({ Show-VigilWelcome -Force })
+$collapseMenu.Items.Add($miAbout) | Out-Null
+$collapseMenu.Items.Add((New-Object System.Windows.Controls.Separator)) | Out-Null
+$miClose = New-Object System.Windows.Controls.MenuItem
+$miClose.Header = 'Close VIGIL'
+$miClose.Add_Click({
     $Global:VigilSettings.posX = [int]$window.Left
     $Global:VigilSettings.posY = [int]$window.Top
     Save-VigilSettings $Global:VigilSettings
     $window.Close()
 })
+$collapseMenu.Items.Add($miClose) | Out-Null
+$BtnCollapse.ContextMenu = $collapseMenu
+
+# Title bar drag + double-click toggles compact mode
+$TitleBar.Add_MouseLeftButtonDown({
+    param($s, $e)
+    if ($e.ClickCount -ge 2) {
+        & $script:ToggleCompactFn
+        $e.Handled = $true
+    } else {
+        $window.DragMove()
+    }
+})
 
 $script:IsCollapsed = $false
-$BtnCollapse.Add_Click({
+$script:ToggleCompactFn = {
     if ($script:IsCollapsed) {
         $TaskArea.Visibility   = 'Visible'
         $StatusArea.Visibility = 'Visible'
@@ -1529,7 +1533,8 @@ $BtnCollapse.Add_Click({
         $window.Opacity = 0.65
         $script:IsCollapsed = $true
     }
-})
+}
+$BtnCollapse.Add_Click({ & $script:ToggleCompactFn })
 
 $sortMenu = New-Object System.Windows.Controls.ContextMenu
 
