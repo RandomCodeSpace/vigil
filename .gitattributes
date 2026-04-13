@@ -1,8 +1,7 @@
-# VIGIL scripts: pin to LF line endings + UTF-8 BOM so Windows PowerShell 5.1
-# reads them consistently regardless of core.autocrlf settings.
-*.ps1        text eol=lf working-tree-encoding=UTF-8-BOM
-*.ps1xml     text eol=lf working-tree-encoding=UTF-8-BOM
-*.md         text eol=lf
-*.json       text eol=lf
-*.gitignore  text eol=lf
-*.gitattributes text eol=lf
+# VIGIL scripts: pin to LF line endings. The UTF-8 BOM is stored as literal
+# bytes inside the files — do NOT use working-tree-encoding, that triggers
+# git's iconv pass which fails on BOM round-trip.
+*.ps1    -text
+*.ps1xml -text
+*.md     text eol=lf
+*.json   text eol=lf

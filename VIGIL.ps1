@@ -189,19 +189,28 @@ $script:PriorityRank = @{ critical = 0; high = 1; normal = 2; low = 3 }
 
 function Sort-VigilTasks([object[]]$tasks) {
     $now = Get-Date
-    $tasks | Sort-Object @{
-        Expression = {
-            $due = if ($_.dueDate) { [datetime]::Parse($_.dueDate) } else { [datetime]::MaxValue }
-            $overdue = ($due -lt $now -and -not $_.done)
-            if ($overdue) { 0 } else { 1 }
+    $annotated = foreach ($t in $tasks) {
+        $due = [datetime]::MaxValue
+        if ($t.dueDate) {
+            try { $due = [datetime]::Parse($t.dueDate) } catch {}
         }
-    }, @{
-        Expression = { $script:PriorityRank[$_.priority] }
-    }, @{
-        Expression = {
-            if ($_.dueDate) { [datetime]::Parse($_.dueDate) } else { [datetime]::MaxValue }
+        $overdue = 1
+        if (($due -lt $now) -and (-not $t.done)) { $overdue = 0 }
+        $prank = 9
+        if ($script:PriorityRank.ContainsKey($t.priority)) {
+            $prank = $script:PriorityRank[$t.priority]
+        }
+        [pscustomobject]@{
+            _task     = $t
+            _overdue  = $overdue
+            _priority = $prank
+            _due      = $due
         }
     }
+    $sorted = @($annotated) | Sort-Object -Property _overdue, _priority, _due
+    $out = @()
+    foreach ($row in $sorted) { $out += $row._task }
+    return $out
 }
 
 function Format-DueLabel([string]$iso) {
