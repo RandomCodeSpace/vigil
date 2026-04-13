@@ -12,7 +12,7 @@ param()
 
 # Build stamp - bumped on every commit. Visible in status bar + vigil.log.
 # Format: YYYY-MM-DD HH:MM (UTC)  buildN
-$script:VigilVersion = '2026-04-14 01:15 UTC  build26 global-tasks-scope'
+$script:VigilVersion = '2026-04-14 02:30 UTC  build27 phase3-outlook-sync'
 
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName PresentationFramework
@@ -245,6 +245,246 @@ function Save-VigilSettings($settings) {
     }
 }
 
+# --- Phase 3: Outlook COM sync --------------------------------------------
+
+function Test-OutlookAvailable {
+    $ol = $null
+    try {
+        $ol = [System.Runtime.InteropServices.Marshal]::GetActiveObject('Outlook.Application')
+        return $true
+    } catch {
+        return $false
+    } finally {
+        if ($null -ne $ol) {
+            try { [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($ol) } catch {}
+        }
+        [GC]::Collect(); [GC]::WaitForPendingFinalizers()
+    }
+}
+
+function Set-VigilSourceRef {
+    param($task, [string]$ref)
+    if ($task.PSObject.Properties.Match('sourceRef').Count -eq 0) {
+        Add-Member -InputObject $task -MemberType NoteProperty -Name sourceRef -Value $ref -Force
+    } else {
+        $task.sourceRef = $ref
+    }
+}
+
+function Sync-VigilFromOutlook {
+    $ol = $null; $ns = $null
+    $added = 0; $completed = 0
+    try {
+        try { $ol = [System.Runtime.InteropServices.Marshal]::GetActiveObject('Outlook.Application') }
+        catch {
+            if ($Global:VigilSettings.outlookSync) {
+                $ol = New-Object -ComObject Outlook.Application
+            } else {
+                Write-VigilLog 'Outlook not running - sync skipped'
+                return $false
+            }
+        }
+        $ns = $ol.GetNamespace('MAPI')
+
+        # Reload from disk (bulletproof against in-memory staleness)
+        $current = @(Load-VigilTasks)
+        $cleaned = @()
+        foreach ($t in $current) { if ($null -ne $t -and $t.id) { $cleaned += $t } }
+        $current = $cleaned
+
+        # Build dedup set: 'source|sourceRef' -> existing task
+        $existing = @{}
+        foreach ($t in $current) {
+            $ref = ''
+            if ($t.PSObject.Properties.Match('sourceRef').Count -gt 0) { $ref = [string]$t.sourceRef }
+            if ($t.source -and $ref) {
+                $existing[([string]$t.source + '|' + $ref)] = $t
+            }
+        }
+
+        # ---- Calendar (next 24h meetings) ----
+        $cal = $null; $calItems = $null; $restricted = $null
+        try {
+            $cal = $ns.GetDefaultFolder(9)
+            $calItems = $cal.Items
+            $calItems.IncludeRecurrences = $true
+            $calItems.Sort('[Start]')
+            $start = (Get-Date).ToString('g')
+            $end   = (Get-Date).AddHours(24).ToString('g')
+            $filter = "[Start] >= '" + $start + "' AND [Start] <= '" + $end + "'"
+            $restricted = $calItems.Restrict($filter)
+            foreach ($apt in $restricted) {
+                try {
+                    $entryId = [string]$apt.EntryID
+                    $key = 'outlook-cal|' + $entryId
+                    if (-not $existing.ContainsKey($key)) {
+                        $subject = [string]$apt.Subject
+                        if ([string]::IsNullOrWhiteSpace($subject)) { $subject = '(no subject)' }
+                        $task = New-VigilTask -Title $subject -Priority 'high' -Source 'outlook-cal'
+                        $task.dueDate = $apt.Start.ToString('o')
+                        Set-VigilSourceRef $task $entryId
+                        $current += $task
+                        $added++
+                    }
+                } finally {
+                    try { [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($apt) } catch {}
+                }
+            }
+        } finally {
+            foreach ($o in @($restricted, $calItems, $cal)) {
+                if ($null -ne $o) { try { [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($o) } catch {} }
+            }
+        }
+
+        # ---- Flagged emails ----
+        $inb = $null; $inbItems = $null; $flagged = $null
+        try {
+            $inb = $ns.GetDefaultFolder(6)
+            $inbItems = $inb.Items
+            $flagged = $inbItems.Restrict('[FlagStatus] = 2')
+            foreach ($mail in $flagged) {
+                try {
+                    $entryId = [string]$mail.EntryID
+                    $key = 'outlook-flag|' + $entryId
+                    if (-not $existing.ContainsKey($key)) {
+                        $subject = [string]$mail.Subject
+                        if ([string]::IsNullOrWhiteSpace($subject)) { $subject = '(no subject)' }
+                        if ($subject.Length -gt 80) { $subject = $subject.Substring(0, 77) + '...' }
+                        $task = New-VigilTask -Title $subject -Priority 'normal' -Source 'outlook-flag'
+                        try {
+                            if ($mail.TaskDueDate -and $mail.TaskDueDate.Year -gt 2000) {
+                                $task.dueDate = $mail.TaskDueDate.ToString('o')
+                            }
+                        } catch {}
+                        Set-VigilSourceRef $task $entryId
+                        $current += $task
+                        $added++
+                    }
+                } finally {
+                    try { [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($mail) } catch {}
+                }
+            }
+        } finally {
+            foreach ($o in @($flagged, $inbItems, $inb)) {
+                if ($null -ne $o) { try { [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($o) } catch {} }
+            }
+        }
+
+        # ---- Outlook Tasks folder (incomplete only) ----
+        $tks = $null; $tksItems = $null; $openTasks = $null
+        try {
+            $tks = $ns.GetDefaultFolder(13)
+            $tksItems = $tks.Items
+            $openTasks = $tksItems.Restrict('[Complete] = False')
+            $priMap = @{ 0 = 'low'; 1 = 'normal'; 2 = 'high' }
+            foreach ($ot in $openTasks) {
+                try {
+                    $entryId = [string]$ot.EntryID
+                    $key = 'outlook-task|' + $entryId
+                    if (-not $existing.ContainsKey($key)) {
+                        $subject = [string]$ot.Subject
+                        if ([string]::IsNullOrWhiteSpace($subject)) { $subject = '(no subject)' }
+                        $pri = 'normal'
+                        try {
+                            $imp = [int]$ot.Importance
+                            if ($priMap.ContainsKey($imp)) { $pri = $priMap[$imp] }
+                        } catch {}
+                        $task = New-VigilTask -Title $subject -Priority $pri -Source 'outlook-task'
+                        try {
+                            if ($ot.DueDate -and $ot.DueDate.Year -gt 2000) {
+                                $task.dueDate = $ot.DueDate.ToString('o')
+                            }
+                        } catch {}
+                        Set-VigilSourceRef $task $entryId
+                        $current += $task
+                        $added++
+                    }
+                } finally {
+                    try { [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($ot) } catch {}
+                }
+            }
+        } finally {
+            foreach ($o in @($openTasks, $tksItems, $tks)) {
+                if ($null -ne $o) { try { [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($o) } catch {} }
+            }
+        }
+
+        # Auto-complete past calendar items
+        $now = Get-Date
+        foreach ($t in $current) {
+            if ($t.source -eq 'outlook-cal' -and -not $t.done -and $t.dueDate) {
+                try {
+                    $d = [datetime]::Parse($t.dueDate)
+                    if ($d -lt $now) {
+                        $t.done = $true
+                        $t.doneAt = $now.ToString('o')
+                        $completed++
+                    }
+                } catch {}
+            }
+        }
+
+        Save-VigilTasks $current
+        $Global:VigilTasks = $current
+        $Global:VigilSettings.lastSyncTime = (Get-Date).ToString('o')
+        Save-VigilSettings $Global:VigilSettings
+        $msg = 'Outlook sync OK: +{0} new, {1} auto-completed' -f $added, $completed
+        Write-VigilLog $msg
+        return $true
+    } catch {
+        $em = 'Outlook sync FAILED: ' + $_.Exception.Message
+        Write-VigilLog $em
+        return $false
+    } finally {
+        foreach ($o in @($ns, $ol)) {
+            if ($null -ne $o) { try { [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($o) } catch {} }
+        }
+        [GC]::Collect(); [GC]::WaitForPendingFinalizers()
+        [GC]::Collect(); [GC]::WaitForPendingFinalizers()
+    }
+}
+
+# --- Phase 4: Auto-start shortcut + filter helpers -------------------------
+
+function Install-VigilStartupShortcut {
+    try {
+        if ($Global:VigilSettings.autoStartInstalled) { return }
+        $startupDir = [Environment]::GetFolderPath('Startup')
+        if (-not (Test-Path $startupDir)) { return }
+        $lnkPath = Join-Path $startupDir 'VIGIL.lnk'
+        $wsh = New-Object -ComObject WScript.Shell
+        try {
+            $shortcut = $wsh.CreateShortcut($lnkPath)
+            $shortcut.TargetPath = (Join-Path $PSHOME 'powershell.exe')
+            $scriptPath = $PSCommandPath
+            if (-not $scriptPath) { $scriptPath = $MyInvocation.MyCommand.Path }
+            $shortcut.Arguments = '-ExecutionPolicy Bypass -WindowStyle Hidden -File "' + $scriptPath + '"'
+            $shortcut.WorkingDirectory = Split-Path $scriptPath
+            $shortcut.Description = 'VIGIL - Personal Task Command Center'
+            $shortcut.WindowStyle = 7   # minimized
+            $shortcut.Save()
+        } finally {
+            try { [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($wsh) } catch {}
+        }
+        $Global:VigilSettings.autoStartInstalled = $true
+        Save-VigilSettings $Global:VigilSettings
+        Write-VigilLog 'Startup shortcut installed'
+    } catch {
+        $em = 'Startup shortcut install failed: ' + $_.Exception.Message
+        Write-VigilLog $em
+    }
+}
+
+function Filter-VigilTasks([object[]]$tasks, [string]$mode) {
+    if (-not $mode) { return $tasks }
+    switch ($mode) {
+        'manual'  { return @($tasks | Where-Object { $_.source -eq 'manual' }) }
+        'outlook' { return @($tasks | Where-Object { $_.source -like 'outlook-*' }) }
+        'urgent'  { return @($tasks | Where-Object { $_.priority -eq 'critical' -or $_.priority -eq 'high' }) }
+        default   { return $tasks }
+    }
+}
+
 # --- Sort + priority helpers -----------------------------------------------
 $script:PriorityRank = @{ critical = 0; high = 1; normal = 2; low = 3 }
 
@@ -473,9 +713,14 @@ $xaml = @'
                        Foreground="#FFFFFF" HorizontalAlignment="Center" VerticalAlignment="Center"/>
           </Border>
 
-          <Button Grid.Column="3" x:Name="BtnSort" Content="Smart"
-                  Style="{StaticResource GhostButton}" Margin="0,0,8,0"
-                  ToolTip="Change sort order"/>
+          <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
+            <Button x:Name="BtnSync" Content="Sync"
+                    Style="{StaticResource GhostButton}" Margin="0,0,6,0"
+                    ToolTip="Sync from Outlook"/>
+            <Button x:Name="BtnSort" Content="Smart"
+                    Style="{StaticResource GhostButton}" Margin="0,0,8,0"
+                    ToolTip="Sort / Filter"/>
+          </StackPanel>
 
           <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center">
             <Button x:Name="BtnCollapse" Style="{StaticResource IconButton}" ToolTip="Minimize">
@@ -554,6 +799,7 @@ $TitleBar    = $window.FindName('TitleBar')
 $BtnCollapse = $window.FindName('BtnCollapse')
 $BtnClose    = $window.FindName('BtnClose')
 $BtnSort     = $window.FindName('BtnSort')
+$BtnSync     = $window.FindName('BtnSync')
 $TaskArea    = $window.FindName('TaskArea')
 $TaskList    = $window.FindName('TaskList')
 $AddArea     = $window.FindName('AddArea')
@@ -580,12 +826,12 @@ if ($cleaned.Count -ne $Global:VigilTasks.Count) {
     $Global:VigilTasks = $cleaned
     Save-VigilTasks $Global:VigilTasks
 }
-$script:Settings = Load-VigilSettings
+$Global:VigilSettings = Load-VigilSettings
 
 # Restore position (clamped to working area)
 $wa = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
-$window.Left = [math]::Max($wa.X, [math]::Min($script:Settings.posX, $wa.Right  - 340))
-$window.Top  = [math]::Max($wa.Y, [math]::Min($script:Settings.posY, $wa.Bottom - 460))
+$window.Left = [math]::Max($wa.X, [math]::Min($Global:VigilSettings.posX, $wa.Right  - 340))
+$window.Top  = [math]::Max($wa.Y, [math]::Min($Global:VigilSettings.posY, $wa.Bottom - 460))
 
 # --- Rendering -------------------------------------------------------------
 function Build-TaskCard($task) {
@@ -747,10 +993,18 @@ $script:SortLabels = @{
 
 function Refresh-Render {
     $TaskList.Items.Clear()
-    $visible = if ($script:Settings.showCompleted) { $Global:VigilTasks } else { @($Global:VigilTasks | Where-Object { -not $_.done }) }
-    $mode = 'smart'
-    if ($script:Settings.sortMode) { $mode = [string]$script:Settings.sortMode }
-    $sorted = Sort-VigilTasks -tasks $visible -mode $mode
+    $tasks = $Global:VigilTasks
+    if (-not $Global:VigilSettings.showCompleted) {
+        $tasks = @($tasks | Where-Object { -not $_.done })
+    }
+    $filterMode = 'all'
+    if ($Global:VigilSettings.activeFilter) { $filterMode = [string]$Global:VigilSettings.activeFilter }
+    $tasks = Filter-VigilTasks -tasks $tasks -mode $filterMode
+
+    $sortMode = 'smart'
+    if ($Global:VigilSettings.sortMode) { $sortMode = [string]$Global:VigilSettings.sortMode }
+    $sorted = Sort-VigilTasks -tasks $tasks -mode $sortMode
+
     foreach ($t in $sorted) {
         $card = Build-TaskCard $t
         $TaskList.Items.Add($card) | Out-Null
@@ -758,12 +1012,22 @@ function Refresh-Render {
     $active = @($Global:VigilTasks | Where-Object { -not $_.done }).Count
     $CountText.Text = [string]$active
     $CountBadge.Visibility = if ($active -gt 0) { 'Visible' } else { 'Collapsed' }
-    $StatusRight.Text = ('{0} active' -f $active)
+
+    $rightText = ('{0} active' -f $active)
+    if ($Global:VigilSettings.lastSyncTime) {
+        try {
+            $lst = [datetime]::Parse($Global:VigilSettings.lastSyncTime)
+            $rightText = $rightText + '  |  synced ' + $lst.ToString('h:mm tt')
+        } catch {}
+    }
+    $StatusRight.Text = $rightText
     $StatusLeft.Text  = $script:VigilVersion
 
-    $label = $script:SortLabels[$mode]
-    if (-not $label) { $label = 'Smart' }
-    $BtnSort.Content = ($label + ' ' + [string][char]0x25BE)
+    $sortLabel = $script:SortLabels[$sortMode]
+    if (-not $sortLabel) { $sortLabel = 'Smart' }
+    $filterSuffix = ''
+    if ($filterMode -ne 'all') { $filterSuffix = ' / ' + $filterMode }
+    $BtnSort.Content = ($sortLabel + $filterSuffix + ' ' + [string][char]0x25BE)
 }
 
 function Toggle-Done([string]$id, [bool]$done) {
@@ -794,9 +1058,9 @@ function Handle-ContextAction($tag) {
 $TitleBar.Add_MouseLeftButtonDown({ $window.DragMove() })
 
 $BtnClose.Add_Click({
-    $script:Settings.posX = [int]$window.Left
-    $script:Settings.posY = [int]$window.Top
-    Save-VigilSettings $script:Settings
+    $Global:VigilSettings.posX = [int]$window.Left
+    $Global:VigilSettings.posY = [int]$window.Top
+    Save-VigilSettings $Global:VigilSettings
     $window.Close()
 })
 
@@ -818,6 +1082,18 @@ $BtnCollapse.Add_Click({
 })
 
 $sortMenu = New-Object System.Windows.Controls.ContextMenu
+
+# Section header helper
+$addHeader = {
+    param($text)
+    $h = New-Object System.Windows.Controls.MenuItem
+    $h.Header = $text
+    $h.IsEnabled = $false
+    $h.FontSize = 10
+    $sortMenu.Items.Add($h) | Out-Null
+}
+
+& $addHeader 'SORT BY'
 $sortModes = @(
     @{ key = 'smart';    label = 'Smart (overdue + priority)' }
     @{ key = 'priority'; label = 'Priority' }
@@ -831,16 +1107,52 @@ foreach ($opt in $sortModes) {
     $mi.Add_Click({
         param($s, $e)
         $k = [string]$s.Tag
-        $script:Settings.sortMode = $k
-        Save-VigilSettings $script:Settings
+        $Global:VigilSettings.sortMode = $k
+        Save-VigilSettings $Global:VigilSettings
         Refresh-Render
     })
     $sortMenu.Items.Add($mi) | Out-Null
 }
+
+$sortMenu.Items.Add((New-Object System.Windows.Controls.Separator)) | Out-Null
+& $addHeader 'FILTER'
+$filterModes = @(
+    @{ key = 'all';     label = 'All tasks' }
+    @{ key = 'manual';  label = 'Manual only' }
+    @{ key = 'outlook'; label = 'Outlook only' }
+    @{ key = 'urgent';  label = 'Urgent (high + critical)' }
+)
+foreach ($opt in $filterModes) {
+    $mi = New-Object System.Windows.Controls.MenuItem
+    $mi.Header = $opt.label
+    $mi.Tag = $opt.key
+    $mi.Add_Click({
+        param($s, $e)
+        $k = [string]$s.Tag
+        $Global:VigilSettings.activeFilter = $k
+        Save-VigilSettings $Global:VigilSettings
+        Refresh-Render
+    })
+    $sortMenu.Items.Add($mi) | Out-Null
+}
+
 $BtnSort.Add_Click({
     $sortMenu.PlacementTarget = $BtnSort
     $sortMenu.Placement = 'Bottom'
     $sortMenu.IsOpen = $true
+})
+
+# Sync button wiring
+$BtnSync.Add_Click({
+    $BtnSync.Content = 'Syncing...'
+    $BtnSync.IsEnabled = $false
+    try {
+        [void](Sync-VigilFromOutlook)
+        Refresh-Render
+    } finally {
+        $BtnSync.Content = 'Sync'
+        $BtnSync.IsEnabled = $true
+    }
 })
 
 $AddFn = {
@@ -859,9 +1171,9 @@ $AddInput.Add_KeyDown({
 })
 
 $window.Add_Closing({
-    $script:Settings.posX = [int]$window.Left
-    $script:Settings.posY = [int]$window.Top
-    Save-VigilSettings $script:Settings
+    $Global:VigilSettings.posX = [int]$window.Left
+    $Global:VigilSettings.posY = [int]$window.Top
+    Save-VigilSettings $Global:VigilSettings
     try { $script:Mutex.ReleaseMutex() } catch {}
     $script:Mutex.Dispose()
 })
@@ -1135,6 +1447,35 @@ $window.Add_Closing({
 })
 
 Refresh-Render
+
+# --- Phase 4: auto-start shortcut (first-run silent install) ---
+Install-VigilStartupShortcut
+
+# --- Phase 3: 15-min Outlook auto-sync timer ---
+$syncTimer = New-Object System.Windows.Threading.DispatcherTimer
+$syncTimer.Interval = [TimeSpan]::FromMinutes(15)
+$syncTimer.Add_Tick({
+    try {
+        if (Test-OutlookAvailable) {
+            [void](Sync-VigilFromOutlook)
+            Refresh-Render
+        }
+    } catch {
+        $em = 'Auto-sync error: ' + $_.Exception.Message
+        Write-VigilLog $em
+    }
+})
+$syncTimer.Start()
+
+# Startup sync (once, after window is shown) -- attach via Loaded event
+$window.Add_Loaded({
+    try {
+        if (Test-OutlookAvailable) {
+            [void](Sync-VigilFromOutlook)
+            Refresh-Render
+        }
+    } catch {}
+})
 
 # Wrap ShowDialog so any handler failure lands in vigil.log with context
 try {
