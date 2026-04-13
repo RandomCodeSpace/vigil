@@ -155,9 +155,16 @@ Assert-Count 3 (Filter-VigilTasks -tasks $filterFixture -mode 'urgent')  'urgent
 Section 'Format-DueLabel'
 # --------------------------------------------------------------------------
 
-$todayAt5 = (Get-Date).Date.AddHours(17)
-$label1 = Format-DueLabel $todayAt5.ToString('o')
-Assert-True ($label1 -like 'Today*') "today-at-5pm -> $label1"
+# Pick a time that's definitely in the future AND definitely still today.
+# Skip the assertion if current hour is 23+ (can't land a same-day future time).
+$nowHour = (Get-Date).Hour
+if ($nowHour -lt 23) {
+    $futureToday = (Get-Date).AddHours(1)   # +1h from now
+    $label1 = Format-DueLabel $futureToday.ToString('o')
+    Assert-True ($label1 -like 'Today*') "today-future-1h -> $label1"
+} else {
+    Write-Host '  SKIP  today-future-1h (test running after 23:00)' -ForegroundColor Yellow
+}
 
 $tomorrowAt9 = (Get-Date).Date.AddDays(1).AddHours(9)
 $label2 = Format-DueLabel $tomorrowAt9.ToString('o')
