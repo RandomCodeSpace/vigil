@@ -714,6 +714,130 @@ try {
     Write-Check 'Prior VIGIL install state' $true $_.Exception.Message
 }
 
+# --- Email-specific inspection (checks 56-60) ---
+
+# 56. Flagged email count + due-date presence sample.
+#     Tells me how much data Phase 3 flag-sync will handle and whether flags
+#     routinely carry TaskDueDate (affects dueDate mapping fallback).
+try {
+    $ol  = New-Object -ComObject Outlook.Application -ErrorAction Stop
+    $ns  = $ol.GetNamespace('MAPI')
+    $inb = $ns.GetDefaultFolder(6)
+    $flagged = $inb.Items.Restrict('[FlagStatus] = 2')
+    $count = $flagged.Count
+    $withDue = 0
+    $sampleMax = [math]::Min(10, $count)
+    for ($i = 1; $i -le $sampleMax; $i++) {
+        $it = $flagged.Item($i)
+        if ($it.TaskDueDate -and $it.TaskDueDate.Year -gt 2000) { $withDue++ }
+        [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($it)
+    }
+    foreach ($o in @($flagged, $inb, $ns, $ol)) {
+        [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($o)
+    }
+    [GC]::Collect(); [GC]::WaitForPendingFinalizers()
+    Write-Check 'Flagged emails + due-date sample' $true "$count flagged; $withDue/$sampleMax sampled have TaskDueDate"
+} catch {
+    Write-Check 'Flagged emails + due-date sample' $false $_.Exception.Message
+}
+
+# 57. Cached Exchange Mode enabled (affects sync latency + offline behavior)
+try {
+    $found = $false; $enabled = $false; $detail = 'No Outlook profile keys found'
+    $officeVersions = '16.0','15.0','14.0'
+    foreach ($v in $officeVersions) {
+        $base = "HKCU:\Software\Microsoft\Office\$v\Outlook\Cached Mode"
+        if (Test-Path $base) {
+            $found = $true
+            $val = (Get-ItemProperty -Path $base -Name Enable -ErrorAction SilentlyContinue).Enable
+            if ($val -eq 1) { $enabled = $true }
+            $detail = "Office $v, Cached Mode Enable = $val"
+            break
+        }
+    }
+    if (-not $found) {
+        Write-Check 'Cached Exchange Mode' $true 'No cached-mode registry keys (online-only or non-Exchange)'
+    } else {
+        Write-Check 'Cached Exchange Mode' $enabled $detail
+    }
+} catch {
+    Write-Check 'Cached Exchange Mode' $true $_.Exception.Message
+}
+
+# 58. Primary SMTP address of the current mailbox (identity for task attribution)
+try {
+    $ol = New-Object -ComObject Outlook.Application -ErrorAction Stop
+    $ns = $ol.GetNamespace('MAPI')
+    $smtp = ''
+    try {
+        $cu = $ns.CurrentUser
+        $ae = $cu.AddressEntry
+        if ($ae -and $ae.Type -eq 'EX') {
+            $eu = $ae.GetExchangeUser()
+            if ($eu) { $smtp = $eu.PrimarySmtpAddress; [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($eu) }
+        } elseif ($ae) {
+            $smtp = $ae.Address
+        }
+        [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($ae)
+        [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($cu)
+    } catch {}
+    foreach ($o in @($ns, $ol)) {
+        [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($o)
+    }
+    [GC]::Collect(); [GC]::WaitForPendingFinalizers()
+    $ok = -not [string]::IsNullOrWhiteSpace($smtp)
+    $detail = if ($ok) { "Primary SMTP: $smtp" } else { 'Could not resolve primary SMTP' }
+    Write-Check 'Primary SMTP address resolvable' $ok $detail
+} catch {
+    Write-Check 'Primary SMTP address resolvable' $false $_.Exception.Message
+}
+
+# 59. Mailbox type (Exchange / Exchange Online / IMAP / POP / PST)
+#     Detected from Stores.ExchangeStoreType where available.
+try {
+    $ol = New-Object -ComObject Outlook.Application -ErrorAction Stop
+    $ns = $ol.GetNamespace('MAPI')
+    $stores = $ns.Stores
+    $types = @()
+    foreach ($s in $stores) {
+        $kind = 'Unknown'
+        try {
+            switch ($s.ExchangeStoreType) {
+                0 { $kind = 'PrimaryExchange' }
+                1 { $kind = 'DelegateExchange' }
+                2 { $kind = 'PublicFolder' }
+                3 { $kind = 'NotExchange' }
+                default { $kind = "Type$($s.ExchangeStoreType)" }
+            }
+        } catch { $kind = 'NotExchange' }
+        $types += "$($s.DisplayName)=$kind"
+        [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($s)
+    }
+    foreach ($o in @($stores, $ns, $ol)) {
+        [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($o)
+    }
+    [GC]::Collect(); [GC]::WaitForPendingFinalizers()
+    Write-Check 'Mailbox store types' $true ($types -join '; ')
+} catch {
+    Write-Check 'Mailbox store types' $false $_.Exception.Message
+}
+
+# 60. Unread inbox count (informational — sync volume sizing)
+try {
+    $ol  = New-Object -ComObject Outlook.Application -ErrorAction Stop
+    $ns  = $ol.GetNamespace('MAPI')
+    $inb = $ns.GetDefaultFolder(6)
+    $unread = $inb.UnReadItemCount
+    $total  = $inb.Items.Count
+    foreach ($o in @($inb, $ns, $ol)) {
+        [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($o)
+    }
+    [GC]::Collect(); [GC]::WaitForPendingFinalizers()
+    Write-Check 'Inbox size + unread count' $true "$unread unread / $total total"
+} catch {
+    Write-Check 'Inbox size + unread count' $false $_.Exception.Message
+}
+
 # --- Summary + compact result string ---
 
 $total  = $results.Count

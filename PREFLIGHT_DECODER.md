@@ -1,6 +1,6 @@
 # VIGIL Preflight Result String — Decoder Reference
 
-**Current schema: v2 (55 checks).** v1 (35 checks) is frozen.
+**Current schema: v2 (60 checks).** v1 (35 checks) is frozen.
 
 When you run `preflight.ps1` on the corp machine, the last line looks like:
 
@@ -19,7 +19,7 @@ VIGIL : v1 : <count> : <hexBitmap> : P<pass> : F<fail> : T<tenantTag>
 | Field | Meaning |
 |---|---|
 | `v2` | Schema version — bump if check order changes |
-| `<count>` | Total checks run (55 in current script) |
+| `<count>` | Total checks run (60 in current script) |
 | `<hexBitmap>` | Big-endian hex. **Bit 0 (LSB) = check #1, bit N-1 = check #N.** `1` = pass, `0` = fail. |
 | `P<pass>` | Passed count |
 | `F<fail>` | Failed count |
@@ -86,6 +86,11 @@ Check N → bit (N-1) of the hex bitmap.
 | 53 | TEMP directory writable | Fallback atomic-write location. |
 | 54 | Toast notifications allowed | Informational — Phase 5 toast feasibility. |
 | 55 | Prior VIGIL install state | If TRUE in detail, trigger upgrade path. |
+| 56 | Flagged emails + due-date sample | Sizes Phase 3 flag sync; detail tells me if TaskDueDate fallback is needed. |
+| 57 | Cached Exchange Mode | If FAIL (disabled), Phase 3 sync runs against live mailbox — slower, add backoff. |
+| 58 | Primary SMTP address resolvable | If FAIL, skip per-user task attribution; tasks are unowned. |
+| 59 | Mailbox store types | Detail tells me Exchange vs PST vs delegated. Delegated stores need different folder lookup. |
+| 60 | Inbox size + unread count | Informational sizing — sync volume estimate. |
 
 ## Fatal checks (any one failing = VIGIL as designed cannot run)
 
