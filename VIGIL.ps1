@@ -13,7 +13,7 @@ param(
 
 # Build stamp - bumped on every commit. Visible in status bar + vigil.log.
 # Format: YYYY-MM-DD HH:MM (UTC)  buildN
-$script:VigilVersion = '2026-04-14 03:10 UTC  build57 segoe-ui-everywhere'
+$script:VigilVersion = '2026-04-14 03:10 UTC  build58 status-bar-segoe'
 
 $ErrorActionPreference = 'Stop'
 
@@ -841,11 +841,11 @@ $xaml = @'
                     CornerRadius="0" Padding="8,2" Height="22"
                     VerticalAlignment="Center" MinWidth="44" ToolTip="Calendar items">
               <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <TextBlock Text="CAL " FontSize="9" FontWeight="Bold" Opacity="0.75"
+                <TextBlock Text="CAL " FontFamily="Segoe UI" FontSize="9" FontWeight="Bold" Opacity="0.75"
                           
                            Foreground="{DynamicResource TextOnAccentFillColorPrimaryBrush}"
                            VerticalAlignment="Center"/>
-                <TextBlock x:Name="CountCalText" Text="0" FontSize="9" FontWeight="Bold"
+                <TextBlock x:Name="CountCalText" Text="0" FontFamily="Segoe UI" FontSize="9" FontWeight="Bold"
                           
                            Foreground="{DynamicResource TextOnAccentFillColorPrimaryBrush}"
                            VerticalAlignment="Center"/>
@@ -856,11 +856,11 @@ $xaml = @'
                     CornerRadius="0" Padding="8,1" Margin="6,0,0,0" Height="22"
                     VerticalAlignment="Center" MinWidth="44" ToolTip="Tasks">
               <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <TextBlock Text="TASK " FontSize="9" FontWeight="Bold" Opacity="0.75"
+                <TextBlock Text="TASK " FontFamily="Segoe UI" FontSize="9" FontWeight="Bold" Opacity="0.75"
                           
                            Foreground="{DynamicResource TextFillColorPrimaryBrush}"
                            VerticalAlignment="Center"/>
-                <TextBlock x:Name="CountTaskText" Text="0" FontSize="9" FontWeight="Bold"
+                <TextBlock x:Name="CountTaskText" Text="0" FontFamily="Segoe UI" FontSize="9" FontWeight="Bold"
                           
                            Foreground="{DynamicResource TextFillColorPrimaryBrush}"
                            VerticalAlignment="Center"/>
@@ -870,10 +870,10 @@ $xaml = @'
                     CornerRadius="0" Padding="8,2" Margin="6,0,0,0" Height="22"
                     VerticalAlignment="Center" MinWidth="44" ToolTip="Critical / overdue tasks">
               <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <TextBlock Text="CRIT " FontSize="9" FontWeight="Bold" Opacity="0.85"
+                <TextBlock Text="CRIT " FontFamily="Segoe UI" FontSize="9" FontWeight="Bold" Opacity="0.85"
                           
                            Foreground="#FFFFFF" VerticalAlignment="Center"/>
-                <TextBlock x:Name="CountCritText" Text="0" FontSize="9" FontWeight="Bold"
+                <TextBlock x:Name="CountCritText" Text="0" FontFamily="Segoe UI" FontSize="9" FontWeight="Bold"
                           
                            Foreground="#FFFFFF" VerticalAlignment="Center"/>
               </StackPanel>
@@ -882,10 +882,10 @@ $xaml = @'
                     CornerRadius="0" Padding="8,2" Margin="6,0,0,0" Height="22"
                     VerticalAlignment="Center" MinWidth="44" ToolTip="High priority tasks">
               <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <TextBlock Text="HIGH " FontSize="9" FontWeight="Bold" Opacity="0.85"
+                <TextBlock Text="HIGH " FontFamily="Segoe UI" FontSize="9" FontWeight="Bold" Opacity="0.85"
                           
                            Foreground="#000000" VerticalAlignment="Center"/>
-                <TextBlock x:Name="CountHighText" Text="0" FontSize="9" FontWeight="Bold"
+                <TextBlock x:Name="CountHighText" Text="0" FontFamily="Segoe UI" FontSize="9" FontWeight="Bold"
                           
                            Foreground="#000000" VerticalAlignment="Center"/>
               </StackPanel>
@@ -950,12 +950,10 @@ $xaml = @'
               BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}" BorderThickness="0,1,0,0"
               CornerRadius="0" Padding="12,5">
         <Grid>
-          <TextBlock x:Name="StatusLeft" Text="" FontSize="9"
-                    
+          <TextBlock x:Name="StatusLeft" Text="" FontSize="10" FontFamily="Segoe UI"
                      Foreground="{DynamicResource TextFillColorTertiaryBrush}"
                      VerticalAlignment="Center" HorizontalAlignment="Left"/>
-          <TextBlock x:Name="StatusRight" Text="" FontSize="9"
-                    
+          <TextBlock x:Name="StatusRight" Text="" FontSize="10" FontFamily="Segoe UI"
                      Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                      VerticalAlignment="Center" HorizontalAlignment="Right"/>
         </Grid>
