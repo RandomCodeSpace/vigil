@@ -13,7 +13,7 @@ param(
 
 # Build stamp - bumped on every commit. Visible in status bar + vigil.log.
 # Format: YYYY-MM-DD HH:MM (UTC)  buildN
-$script:VigilVersion = '2026-04-14 03:10 UTC  build36 fluent-mica'
+$script:VigilVersion = '2026-04-14 03:10 UTC  build37 fluent-diag'
 
 $ErrorActionPreference = 'Stop'
 
@@ -52,16 +52,35 @@ public class VigilWin32 {
 # --- Fluent (Mica + dark title bar) capability detection ------------------
 # Requires pwsh 7.5+, .NET 9+, Windows 11 (build 22000+).
 $script:HasFluent = $false
+$script:FluentDiag = 'not-detected'
 if ($script:IsWindowsHost) {
     try {
-        $psVer = $PSVersionTable.PSVersion
+        $psVer  = $PSVersionTable.PSVersion
         $netVer = [Environment]::Version
-        $winBuild = [Environment]::OSVersion.Version.Build
-        $psOk = ($psVer.Major -gt 7) -or ($psVer.Major -eq 7 -and $psVer.Minor -ge 5)
-        if ($psOk -and $netVer.Major -ge 9 -and $winBuild -ge 22000) {
-            $script:HasFluent = $true
+
+        # Environment.OSVersion.Version.Build is unreliable on Win11 under
+        # legacy compat manifests (can report 19041). Read from registry
+        # for the actual current build.
+        $winBuild = 0
+        try {
+            $regKey = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion'
+            $cb = (Get-ItemProperty -Path $regKey -Name CurrentBuildNumber -ErrorAction Stop).CurrentBuildNumber
+            $winBuild = [int]$cb
+        } catch {
+            try { $winBuild = [Environment]::OSVersion.Version.Build } catch { $winBuild = 0 }
         }
-    } catch {}
+
+        $psOk  = ($psVer.Major -gt 7) -or ($psVer.Major -eq 7 -and $psVer.Minor -ge 5)
+        $netOk = ($netVer.Major -ge 9)
+        $winOk = ($winBuild -ge 22000)
+
+        $script:FluentDiag = 'ps={0}.{1} net={2}.{3} winBuild={4} ps_ok={5} net_ok={6} win_ok={7}' -f `
+            $psVer.Major, $psVer.Minor, $netVer.Major, $netVer.Minor, $winBuild, $psOk, $netOk, $winOk
+
+        if ($psOk -and $netOk -and $winOk) { $script:HasFluent = $true }
+    } catch {
+        $script:FluentDiag = 'detection error: ' + $_.Exception.Message
+    }
 }
 
 # --- Hotkey helper (C# bridge so PS avoids HwndSourceHook ref-delegate cast)
@@ -1778,7 +1797,8 @@ $window.Add_Loaded({
                 Write-VigilLog ('Fluent: Mica DWM call returned 0x{0:X}' -f $rc)
             }
         } else {
-            Write-VigilLog 'Fluent: not available (pwsh/.NET/Win build below threshold)'
+            $dmsg = 'Fluent: not available | ' + $script:FluentDiag
+            Write-VigilLog $dmsg
         }
     } catch {
         $em = 'Fluent setup error: ' + $_.Exception.Message
