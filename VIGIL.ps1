@@ -12,7 +12,7 @@ param()
 
 # Build stamp — bumped on every commit. Visible in status bar + vigil.log.
 # Format: YYYY-MM-DD HH:MM (UTC)  buildN
-$script:VigilVersion = '2026-04-13 18:05 UTC  build14'
+$script:VigilVersion = '2026-04-13 19:30 UTC  build15 claude-light'
 
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName PresentationFramework
@@ -162,6 +162,7 @@ function Load-VigilSettings {
         posX = 1200; posY = 400; collapsed = $false; showCompleted = $false
         outlookSync = $false; syncIntervalMin = 15; opacity = 1.0
         lastSyncTime = ''; activeFilter = 'all'; autoStartInstalled = $false
+        sortMode = 'smart'
     }
     if (-not (Test-Path $script:SettingsPath)) { return $default }
     try {
@@ -191,7 +192,7 @@ function Save-VigilSettings($settings) {
 # --- Sort + priority helpers -----------------------------------------------
 $script:PriorityRank = @{ critical = 0; high = 1; normal = 2; low = 3 }
 
-function Sort-VigilTasks([object[]]$tasks) {
+function Sort-VigilTasks([object[]]$tasks, [string]$mode = 'smart') {
     $now = Get-Date
     $annotated = foreach ($t in $tasks) {
         $due = [datetime]::MaxValue
@@ -206,14 +207,26 @@ function Sort-VigilTasks([object[]]$tasks) {
         if ($script:PriorityRank.ContainsKey($pkey)) {
             $prank = $script:PriorityRank[$pkey]
         }
+        $created = [datetime]::MinValue
+        if ($t.createdAt) {
+            try { $created = [datetime]::Parse($t.createdAt) } catch {}
+        }
         [pscustomobject]@{
             _task     = $t
             _overdue  = $overdue
             _priority = $prank
             _due      = $due
+            _created  = $created
         }
     }
-    $sorted = @($annotated) | Sort-Object -Property _overdue, _priority, _due
+    $props = switch ($mode) {
+        'priority' { @('_priority','_due') }
+        'due'      { @('_due','_priority') }
+        'added'    { @('_created') }
+        default    { @('_overdue','_priority','_due') }  # smart
+    }
+    $sorted = @($annotated) | Sort-Object -Property $props
+    if ($mode -eq 'added') { [array]::Reverse($sorted) }  # newest first
     $out = @()
     foreach ($row in $sorted) { $out += $row._task }
     return $out
@@ -249,17 +262,20 @@ $xaml = @'
         SnapsToDevicePixels="True"
         FontFamily="Segoe UI">
   <Window.Resources>
-    <SolidColorBrush x:Key="SurfaceBase"   Color="#000000"/>
-    <SolidColorBrush x:Key="SurfaceGlass"  Color="#CC000000"/>
-    <SolidColorBrush x:Key="SurfaceCard"   Color="#1D1D1F"/>
-    <SolidColorBrush x:Key="SurfaceCardHi" Color="#272729"/>
-    <SolidColorBrush x:Key="Divider"       Color="#14FFFFFF"/>
-    <SolidColorBrush x:Key="TextPrimary"   Color="#FFFFFF"/>
-    <SolidColorBrush x:Key="TextSecondary" Color="#8EFFFFFF"/>
-    <SolidColorBrush x:Key="TextTertiary"  Color="#52FFFFFF"/>
-    <SolidColorBrush x:Key="Accent"        Color="#2997FF"/>
-    <SolidColorBrush x:Key="Destructive"   Color="#FF453A"/>
-    <SolidColorBrush x:Key="Success"       Color="#30D158"/>
+    <!-- Claude light theme — parchment canvas, terracotta accent, warm neutrals -->
+    <SolidColorBrush x:Key="SurfaceBase"   Color="#F5F4ED"/>
+    <SolidColorBrush x:Key="SurfaceGlass"  Color="#FAF9F5"/>
+    <SolidColorBrush x:Key="SurfaceCard"   Color="#FAF9F5"/>
+    <SolidColorBrush x:Key="SurfaceCardHi" Color="#E8E6DC"/>
+    <SolidColorBrush x:Key="Divider"       Color="#F0EEE6"/>
+    <SolidColorBrush x:Key="BorderWarm"    Color="#E8E6DC"/>
+    <SolidColorBrush x:Key="TextPrimary"   Color="#141413"/>
+    <SolidColorBrush x:Key="TextSecondary" Color="#5E5D59"/>
+    <SolidColorBrush x:Key="TextTertiary"  Color="#87867F"/>
+    <SolidColorBrush x:Key="Accent"        Color="#C96442"/>
+    <SolidColorBrush x:Key="AccentLight"   Color="#D97757"/>
+    <SolidColorBrush x:Key="Destructive"   Color="#B53333"/>
+    <SolidColorBrush x:Key="Focus"         Color="#3898EC"/>
 
     <Style x:Key="TitleBarButton" TargetType="Button">
       <Setter Property="Background" Value="Transparent"/>
@@ -272,7 +288,7 @@ $xaml = @'
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="Button">
-            <Border Background="{TemplateBinding Background}" CornerRadius="5">
+            <Border Background="{TemplateBinding Background}" CornerRadius="6">
               <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
             </Border>
           </ControlTemplate>
@@ -280,15 +296,39 @@ $xaml = @'
       </Setter>
       <Style.Triggers>
         <Trigger Property="IsMouseOver" Value="True">
-          <Setter Property="Background" Value="#1AFFFFFF"/>
+          <Setter Property="Background" Value="#E8E6DC"/>
           <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+        </Trigger>
+      </Style.Triggers>
+    </Style>
+
+    <Style x:Key="SortButton" TargetType="Button">
+      <Setter Property="Background" Value="#E8E6DC"/>
+      <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Padding" Value="10,4"/>
+      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border Background="{TemplateBinding Background}" CornerRadius="8"
+                    Padding="{TemplateBinding Padding}">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+      <Style.Triggers>
+        <Trigger Property="IsMouseOver" Value="True">
+          <Setter Property="Background" Value="#D1CFC5"/>
         </Trigger>
       </Style.Triggers>
     </Style>
   </Window.Resources>
 
   <Border CornerRadius="12" Background="{StaticResource SurfaceBase}"
-          BorderBrush="#33FFFFFF" BorderThickness="1" Margin="8">
+          BorderBrush="{StaticResource BorderWarm}" BorderThickness="1" Margin="8">
     <Grid>
       <Grid.RowDefinitions>
         <RowDefinition Height="44"/>
@@ -300,22 +340,28 @@ $xaml = @'
       <!-- Title bar -->
       <Border Grid.Row="0" Background="{StaticResource SurfaceGlass}"
               CornerRadius="12,12,0,0" x:Name="TitleBar">
-        <Border BorderBrush="{StaticResource Divider}" BorderThickness="0,0,0,1">
+        <Border BorderBrush="{StaticResource BorderWarm}" BorderThickness="0,0,0,1">
           <Grid Margin="14,0">
             <Grid.ColumnDefinitions>
               <ColumnDefinition Width="Auto"/>
+              <ColumnDefinition Width="Auto"/>
               <ColumnDefinition Width="*"/>
               <ColumnDefinition Width="Auto"/>
+              <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
-            <TextBlock Grid.Column="0" Text="VIGIL" FontSize="17" FontWeight="SemiBold"
+            <TextBlock Grid.Column="0" Text="VIGIL" FontFamily="Georgia" FontSize="19"
+                       FontWeight="Medium"
                        Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center"/>
-            <Border Grid.Column="1" x:Name="CountBadge" Background="{StaticResource SurfaceCard}"
-                    CornerRadius="10" Padding="8,2" HorizontalAlignment="Left" Margin="10,0,0,0"
+            <Border Grid.Column="1" x:Name="CountBadge" Background="{StaticResource Accent}"
+                    CornerRadius="10" Padding="8,2" Margin="10,0,0,0"
                     VerticalAlignment="Center">
               <TextBlock x:Name="CountText" Text="0" FontSize="11" FontWeight="SemiBold"
-                         Foreground="{StaticResource TextPrimary}"/>
+                         Foreground="#FFFFFF"/>
             </Border>
-            <StackPanel Grid.Column="2" Orientation="Horizontal">
+            <Button Grid.Column="3" x:Name="BtnSort" Content="Sort: Smart &#x25BE;"
+                    Style="{StaticResource SortButton}" Margin="0,0,6,0"
+                    ToolTip="Change sort order"/>
+            <StackPanel Grid.Column="4" Orientation="Horizontal">
               <Button x:Name="BtnCollapse" Content="&#xE921;" FontFamily="Segoe MDL2 Assets" FontSize="10" Style="{StaticResource TitleBarButton}" ToolTip="Minimize"/>
               <Button x:Name="BtnClose"    Content="&#xE8BB;" FontFamily="Segoe MDL2 Assets" FontSize="10" Style="{StaticResource TitleBarButton}" ToolTip="Close"/>
             </StackPanel>
@@ -336,36 +382,32 @@ $xaml = @'
       </ScrollViewer>
 
       <!-- Inline add -->
-      <Border Grid.Row="2" BorderBrush="{StaticResource Divider}" BorderThickness="0,1,0,0"
-              Padding="14,10">
+      <Border Grid.Row="2" BorderBrush="{StaticResource BorderWarm}" BorderThickness="0,1,0,0"
+              Padding="14,10" Background="{StaticResource SurfaceBase}">
         <Grid>
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*"/>
             <ColumnDefinition Width="Auto"/>
           </Grid.ColumnDefinitions>
-          <TextBox x:Name="AddInput" Grid.Column="0"
-                   Background="{StaticResource SurfaceCard}" Foreground="{StaticResource TextPrimary}"
-                   BorderThickness="0" Padding="10,8" FontSize="13" CaretBrush="{StaticResource Accent}">
-            <TextBox.Resources>
-              <Style TargetType="Border">
-                <Setter Property="CornerRadius" Value="8"/>
-              </Style>
-            </TextBox.Resources>
-          </TextBox>
-          <Button x:Name="BtnAdd" Grid.Column="1" Content="Add" Margin="8,0,0,0"
-                  Background="{StaticResource Accent}" Foreground="White" BorderThickness="0"
-                  Padding="14,8" FontSize="13" FontWeight="Medium" Cursor="Hand">
-            <Button.Resources>
-              <Style TargetType="Border">
-                <Setter Property="CornerRadius" Value="8"/>
-              </Style>
-            </Button.Resources>
-          </Button>
+          <Border Grid.Column="0" Background="#FFFFFF" BorderBrush="{StaticResource BorderWarm}"
+                  BorderThickness="1" CornerRadius="8">
+            <TextBox x:Name="AddInput" Background="Transparent"
+                     Foreground="{StaticResource TextPrimary}"
+                     BorderThickness="0" Padding="10,8" FontSize="13"
+                     CaretBrush="{StaticResource Accent}"/>
+          </Border>
+          <Border Grid.Column="1" Background="{StaticResource Accent}" CornerRadius="8"
+                  Margin="8,0,0,0">
+            <Button x:Name="BtnAdd" Content="Add" Background="Transparent"
+                    Foreground="White" BorderThickness="0"
+                    Padding="16,8" FontSize="13" FontWeight="Medium" Cursor="Hand"/>
+          </Border>
         </Grid>
       </Border>
 
       <!-- Status bar -->
-      <Border Grid.Row="3" BorderBrush="{StaticResource Divider}" BorderThickness="0,1,0,0">
+      <Border Grid.Row="3" BorderBrush="{StaticResource BorderWarm}" BorderThickness="0,1,0,0"
+              Background="{StaticResource SurfaceBase}">
         <Grid Margin="14,0">
           <TextBlock x:Name="StatusLeft" Text="" FontSize="11"
                      Foreground="{StaticResource TextTertiary}"
@@ -388,6 +430,7 @@ $window = [Windows.Markup.XamlReader]::Load($reader)
 $TitleBar    = $window.FindName('TitleBar')
 $BtnCollapse = $window.FindName('BtnCollapse')
 $BtnClose    = $window.FindName('BtnClose')
+$BtnSort     = $window.FindName('BtnSort')
 $TaskList    = $window.FindName('TaskList')
 $AddInput    = $window.FindName('AddInput')
 $BtnAdd      = $window.FindName('BtnAdd')
@@ -411,7 +454,10 @@ function Build-TaskCard($task) {
     $border.Margin = New-Object System.Windows.Thickness(10,4,10,4)
     $border.Padding = New-Object System.Windows.Thickness(12,10,12,10)
     $border.CornerRadius = New-Object System.Windows.CornerRadius(8)
-    $border.Background = [System.Windows.Media.Brushes]::Transparent
+    $ivory = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromRgb(250,249,245))
+    $border.Background = $ivory
+    $border.BorderBrush = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromRgb(232,230,220))
+    $border.BorderThickness = New-Object System.Windows.Thickness(1)
     $border.Cursor = [System.Windows.Input.Cursors]::Hand
 
     $isOverdue = $false
@@ -419,8 +465,8 @@ function Build-TaskCard($task) {
         try { $isOverdue = ([datetime]::Parse($task.dueDate) -lt (Get-Date)) -and -not $task.done } catch {}
     }
     if ($task.priority -eq 'critical' -or $isOverdue) {
-        $border.BorderBrush = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromRgb(255,69,58))
-        $border.BorderThickness = New-Object System.Windows.Thickness(2,0,0,0)
+        $border.BorderBrush = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromRgb(181,51,51))
+        $border.BorderThickness = New-Object System.Windows.Thickness(2,1,1,1)
     }
 
     $grid = New-Object System.Windows.Controls.Grid
@@ -432,25 +478,31 @@ function Build-TaskCard($task) {
     $check.IsChecked = $task.done
     $check.Margin = New-Object System.Windows.Thickness(0,2,10,0)
     $check.VerticalAlignment = 'Top'
-    $check.Foreground = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromArgb(140,255,255,255))
+    $check.Foreground = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromRgb(94,93,89))
     [System.Windows.Controls.Grid]::SetColumn($check, 0)
 
     $stack = New-Object System.Windows.Controls.StackPanel
     [System.Windows.Controls.Grid]::SetColumn($stack, 1)
 
+    $primaryText   = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromRgb(20,20,19))
+    $secondaryText = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromRgb(94,93,89))
+    $tertiaryText  = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromRgb(135,134,127))
+    $errorText     = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromRgb(181,51,51))
+
     $title = New-Object System.Windows.Controls.TextBlock
     $title.Text = $task.title
+    $title.FontFamily = New-Object System.Windows.Media.FontFamily('Georgia')
     $title.FontSize = 15
     $title.TextWrapping = 'Wrap'
     switch ($task.priority) {
-        'critical' { $title.FontWeight = 'Bold';     $title.Foreground = [System.Windows.Media.Brushes]::White }
-        'high'     { $title.FontWeight = 'SemiBold'; $title.Foreground = [System.Windows.Media.Brushes]::White }
-        'normal'   { $title.FontWeight = 'Normal';   $title.Foreground = [System.Windows.Media.Brushes]::White }
-        'low'      { $title.FontWeight = 'Normal';   $title.Foreground = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromArgb(140,255,255,255)) }
+        'critical' { $title.FontWeight = 'Bold';     $title.Foreground = $errorText }
+        'high'     { $title.FontWeight = 'SemiBold'; $title.Foreground = $primaryText }
+        'normal'   { $title.FontWeight = 'Normal';   $title.Foreground = $primaryText }
+        'low'      { $title.FontWeight = 'Normal';   $title.Foreground = $secondaryText }
     }
     if ($task.done) {
         $title.TextDecorations = [System.Windows.TextDecorations]::Strikethrough
-        $title.Opacity = 0.4
+        $title.Opacity = 0.45
     }
     $stack.Children.Add($title) | Out-Null
 
@@ -463,11 +515,8 @@ function Build-TaskCard($task) {
         $meta.Text = ($metaText -join '  |  ')
         $meta.FontSize = 12
         $meta.Margin = New-Object System.Windows.Thickness(0,3,0,0)
-        if ($isOverdue) {
-            $meta.Foreground = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromRgb(255,69,58))
-        } else {
-            $meta.Foreground = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromArgb(140,255,255,255))
-        }
+        if ($isOverdue) { $meta.Foreground = $errorText }
+        else            { $meta.Foreground = $tertiaryText }
         $stack.Children.Add($meta) | Out-Null
     }
 
@@ -544,10 +593,19 @@ function Build-TaskCard($task) {
     return $border
 }
 
+$script:SortLabels = [ordered]@{
+    smart    = 'Sort: Smart'
+    priority = 'Sort: Priority'
+    due      = 'Sort: Due date'
+    added    = 'Sort: Newest'
+}
+
 function Refresh-Render {
     $TaskList.Items.Clear()
     $visible = if ($script:Settings.showCompleted) { $script:Tasks } else { @($script:Tasks | Where-Object { -not $_.done }) }
-    $sorted = Sort-VigilTasks -tasks $visible
+    $mode = 'smart'
+    if ($script:Settings.sortMode) { $mode = [string]$script:Settings.sortMode }
+    $sorted = Sort-VigilTasks -tasks $visible -mode $mode
     foreach ($t in $sorted) {
         $card = Build-TaskCard $t
         $TaskList.Items.Add($card) | Out-Null
@@ -557,6 +615,10 @@ function Refresh-Render {
     $CountBadge.Visibility = if ($active -gt 0) { 'Visible' } else { 'Collapsed' }
     $StatusRight.Text = "$active active"
     $StatusLeft.Text  = $script:VigilVersion
+
+    $label = $script:SortLabels[$mode]
+    if (-not $label) { $label = 'Sort: Smart' }
+    $BtnSort.Content = ($label + ' ' + [char]0x25BE)
 }
 
 function Toggle-Done([string]$id, [bool]$done) {
@@ -599,6 +661,18 @@ $BtnCollapse.Add_Click({
     } else {
         $window.Height = 460
     }
+})
+
+$BtnSort.Add_Click({
+    $order = @('smart','priority','due','added')
+    $cur = 'smart'
+    if ($script:Settings.sortMode) { $cur = [string]$script:Settings.sortMode }
+    $idx = [array]::IndexOf($order, $cur)
+    if ($idx -lt 0) { $idx = 0 }
+    $next = $order[($idx + 1) % $order.Count]
+    $script:Settings.sortMode = $next
+    Save-VigilSettings $script:Settings
+    Refresh-Render
 })
 
 $AddFn = {
