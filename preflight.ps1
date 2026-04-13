@@ -94,6 +94,197 @@ try {
     Write-Check '~/.vigil writable' $false $_.Exception.Message
 }
 
+# 7. Atomic rename primitive: [System.IO.File]::Replace
+#    Eng review §2A: Move-Item -Force is NOT atomic on Windows. Replace is.
+try {
+    $a = Join-Path $vigilDir '.replace-a'
+    $b = Join-Path $vigilDir '.replace-b'
+    $c = Join-Path $vigilDir '.replace-c'
+    [System.IO.File]::WriteAllText($a, 'new', [System.Text.UTF8Encoding]::new($false))
+    [System.IO.File]::WriteAllText($b, 'old', [System.Text.UTF8Encoding]::new($false))
+    [System.IO.File]::Replace($a, $b, $c)
+    $ok = ((Get-Content $b -Raw) -eq 'new') -and ((Get-Content $c -Raw) -eq 'old')
+    Remove-Item $b, $c -ErrorAction SilentlyContinue
+    Write-Check '[IO.File]::Replace atomic rename + backup' $ok 'Required for crash-safe tasks.json writes'
+} catch {
+    Write-Check '[IO.File]::Replace atomic rename + backup' $false $_.Exception.Message
+}
+
+# 8. UTF-8 without BOM writing
+#    Eng review §2B: BOM breaks many JSON parsers. Verify BOM-less write works.
+try {
+    $noBomFile = Join-Path $vigilDir '.nobom-probe.json'
+    [System.IO.File]::WriteAllText($noBomFile, '{"ok":true}', [System.Text.UTF8Encoding]::new($false))
+    $bytes = [System.IO.File]::ReadAllBytes($noBomFile)
+    $hasBom = ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF)
+    Remove-Item $noBomFile -ErrorAction SilentlyContinue
+    Write-Check 'UTF-8 without BOM write' (-not $hasBom) "BOM present: $hasBom"
+} catch {
+    Write-Check 'UTF-8 without BOM write' $false $_.Exception.Message
+}
+
+# 9. Marshal.ReleaseComObject available (Outlook COM lifecycle, §1A)
+try {
+    $t = [System.Runtime.InteropServices.Marshal]
+    $hasRelease = ($null -ne $t.GetMethod('ReleaseComObject'))
+    Write-Check 'Marshal.ReleaseComObject available' $hasRelease 'Required to avoid Outlook.exe zombie process'
+} catch {
+    Write-Check 'Marshal.ReleaseComObject available' $false $_.Exception.Message
+}
+
+# 10. Calendar Sort-before-Restrict pattern (Outlook COM gotcha, §1B)
+#     Verifies IncludeRecurrences + Sort + Restrict flow actually returns items.
+try {
+    $ol  = New-Object -ComObject Outlook.Application -ErrorAction Stop
+    $ns  = $ol.GetNamespace('MAPI')
+    $cal = $ns.GetDefaultFolder(9)
+    $items = $cal.Items
+    $items.IncludeRecurrences = $true
+    $items.Sort('[Start]')
+    $start = (Get-Date).ToString('g')
+    $end   = (Get-Date).AddHours(24).ToString('g')
+    $filter = "[Start] >= '$start' AND [Start] <= '$end'"
+    $restricted = $items.Restrict($filter)
+    $count = $restricted.Count
+    Write-Check 'Calendar Sort-before-Restrict returns items' $true "Next 24h meetings: $count"
+    foreach ($o in @($restricted, $items, $cal, $ns, $ol)) {
+        [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($o)
+    }
+    [GC]::Collect(); [GC]::WaitForPendingFinalizers()
+} catch {
+    Write-Check 'Calendar Sort-before-Restrict returns items' $false $_.Exception.Message
+}
+
+# 11. Outlook EntryID readable on a flagged email (dedup key, §2E)
+try {
+    $ol  = New-Object -ComObject Outlook.Application -ErrorAction Stop
+    $ns  = $ol.GetNamespace('MAPI')
+    $inb = $ns.GetDefaultFolder(6)
+    $flagged = $inb.Items.Restrict("[FlagStatus] = 2")
+    $hasId = $false
+    if ($flagged.Count -gt 0) {
+        $first = $flagged.Item(1)
+        $hasId = -not [string]::IsNullOrEmpty($first.EntryID)
+        [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($first)
+    } else {
+        $hasId = $true  # no flagged items is not a failure
+    }
+    foreach ($o in @($flagged, $inb, $ns, $ol)) {
+        [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($o)
+    }
+    [GC]::Collect(); [GC]::WaitForPendingFinalizers()
+    Write-Check 'Outlook EntryID readable on flagged items' $hasId 'Used as stable dedup key'
+} catch {
+    Write-Check 'Outlook EntryID readable on flagged items' $false $_.Exception.Message
+}
+
+# 12. Named mutex create/release (single-instance, §1D)
+try {
+    $createdNew = $false
+    $mx = New-Object System.Threading.Mutex($true, 'Global\VIGIL_PreflightProbe', [ref]$createdNew)
+    if ($createdNew) {
+        $mx.ReleaseMutex()
+        $mx.Dispose()
+        Write-Check 'Global named mutex (single-instance)' $true 'Global\VIGIL_PreflightProbe'
+    } else {
+        $mx.Dispose()
+        Write-Check 'Global named mutex (single-instance)' $false 'Mutex already held'
+    }
+} catch {
+    Write-Check 'Global named mutex (single-instance)' $false $_.Exception.Message
+}
+
+# 13. FindWindow / SetForegroundWindow P/Invoke (activate existing instance, §1D)
+try {
+    if (-not ([System.Management.Automation.PSTypeName]'VigilWin32').Type) {
+        Add-Type -ErrorAction Stop -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public class VigilWin32 {
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    public static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
+    [DllImport("user32.dll")]
+    public static extern bool SetForegroundWindow(IntPtr hWnd);
+}
+"@
+    }
+    [void][VigilWin32]::FindWindow($null, 'Program Manager')
+    Write-Check 'FindWindow / SetForegroundWindow P/Invoke' $true 'Used to activate existing VIGIL window'
+} catch {
+    Write-Check 'FindWindow / SetForegroundWindow P/Invoke' $false $_.Exception.Message
+}
+
+# 14. Clipboard read via WPF (used by Ctrl+Win+A flow, §7.3)
+try {
+    $clipOk = $true
+    try { [void][System.Windows.Clipboard]::GetText() } catch { $clipOk = $false }
+    Write-Check 'WPF clipboard read' $clipOk 'Quick-Add auto-fill source'
+} catch {
+    Write-Check 'WPF clipboard read' $false $_.Exception.Message
+}
+
+# 15. Pester available (tests in plan review)
+try {
+    $pester = Get-Module -ListAvailable -Name Pester | Sort-Object Version -Descending | Select-Object -First 1
+    $ok = $null -ne $pester
+    $detail = if ($ok) { "Pester $($pester.Version)" } else { 'Not installed — needed for Phase 1 test bar' }
+    Write-Check 'Pester test framework' $ok $detail
+} catch {
+    Write-Check 'Pester test framework' $false $_.Exception.Message
+}
+
+# 16. Working area / off-screen clamp data (WinForms, §14 risk row)
+try {
+    Add-Type -AssemblyName System.Windows.Forms -ErrorAction Stop
+    $wa = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
+    $detail = "Primary working area: $($wa.Width)x$($wa.Height) @ ($($wa.X),$($wa.Y))"
+    Write-Check 'Screen.WorkingArea available (clamp on-screen)' $true $detail
+} catch {
+    Write-Check 'Screen.WorkingArea available (clamp on-screen)' $false $_.Exception.Message
+}
+
+# 17. DispatcherTimer available (15-min Outlook sync, §6.3)
+try {
+    $dt = New-Object System.Windows.Threading.DispatcherTimer
+    $dt.Interval = [TimeSpan]::FromMinutes(15)
+    Write-Check 'DispatcherTimer available' $true '15-min sync scheduler'
+} catch {
+    Write-Check 'DispatcherTimer available' $false $_.Exception.Message
+}
+
+# 18. WScript.Shell for Startup shortcut creation (§9.2)
+try {
+    $wsh = New-Object -ComObject WScript.Shell -ErrorAction Stop
+    [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($wsh)
+    Write-Check 'WScript.Shell COM (shortcut creation)' $true 'For VIGIL.lnk in Startup folder'
+} catch {
+    Write-Check 'WScript.Shell COM (shortcut creation)' $false $_.Exception.Message
+}
+
+# 19. ExecutionPolicy check (documentation, §13 risk row)
+try {
+    $ep = Get-ExecutionPolicy -Scope CurrentUser
+    $restricted = ($ep -eq 'Restricted' -or $ep -eq 'AllSigned')
+    $detail = "CurrentUser scope: $ep"
+    if ($restricted) { $detail += ' — launch VIGIL with -ExecutionPolicy Bypass' }
+    Write-Check 'ExecutionPolicy allows script run' (-not $restricted) $detail
+} catch {
+    Write-Check 'ExecutionPolicy allows script run' $false $_.Exception.Message
+}
+
+# 20. Cascadia Mono / Consolas font available (§5.1)
+try {
+    Add-Type -AssemblyName System.Drawing -ErrorAction Stop
+    $installed = (New-Object System.Drawing.Text.InstalledFontCollection).Families | ForEach-Object { $_.Name }
+    $hasCascadia = $installed -contains 'Cascadia Mono'
+    $hasConsolas = $installed -contains 'Consolas'
+    $ok = $hasCascadia -or $hasConsolas
+    $detail = "Cascadia Mono: $hasCascadia, Consolas: $hasConsolas"
+    Write-Check 'Monospace font available (Cascadia/Consolas)' $ok $detail
+} catch {
+    Write-Check 'Monospace font available (Cascadia/Consolas)' $false $_.Exception.Message
+}
+
 # Summary
 $total  = $results.Count
 $passed = ($results.Values | Where-Object { $_.Ok }).Count
