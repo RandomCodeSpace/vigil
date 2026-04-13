@@ -13,7 +13,7 @@ param(
 
 # Build stamp - bumped on every commit. Visible in status bar + vigil.log.
 # Format: YYYY-MM-DD HH:MM (UTC)  buildN
-$script:VigilVersion = '2026-04-14 03:10 UTC  build39 net9-refasm-fix'
+$script:VigilVersion = '2026-04-14 03:10 UTC  build40 mica-transparent-frame'
 
 $ErrorActionPreference = 'Stop'
 
@@ -906,7 +906,7 @@ $xaml = @'
 
   </Window.Resources>
 
-  <Border x:Name="OuterFrame" CornerRadius="0" Background="{StaticResource SurfaceBase}"
+  <Border x:Name="OuterFrame" CornerRadius="0" Background="Transparent"
           BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1">
     <Grid>
       <Grid.RowDefinitions>
@@ -965,7 +965,7 @@ $xaml = @'
       </Border>
 
       <!-- Task list area -->
-      <Border Grid.Row="1" x:Name="TaskArea" Background="{StaticResource SurfaceBase}">
+      <Border Grid.Row="1" x:Name="TaskArea" Background="Transparent">
         <ScrollViewer MaxHeight="360" VerticalScrollBarVisibility="Auto"
                       HorizontalScrollBarVisibility="Disabled" Padding="0,2,0,0">
           <ItemsControl x:Name="TaskList">
@@ -1828,9 +1828,6 @@ $window.Add_Loaded({
             $backdrop = 2
             $rc = [VigilWin32]::DwmSetWindowAttribute($h, 38, [ref]$backdrop, 4)
             if ($rc -eq 0) {
-                # Semi-transparent dark overlay so Mica shines through the frame
-                $OuterFrame.Background = New-Object System.Windows.Media.SolidColorBrush(
-                    [System.Windows.Media.Color]::FromArgb(195, 10, 10, 10))
                 Write-VigilLog 'Fluent: Mica backdrop applied'
             } else {
                 Write-VigilLog ('Fluent: Mica DWM call returned 0x{0:X}' -f $rc)
