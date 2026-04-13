@@ -13,7 +13,7 @@ param(
 
 # Build stamp - bumped on every commit. Visible in status bar + vigil.log.
 # Format: YYYY-MM-DD HH:MM (UTC)  buildN
-$script:VigilVersion = '2026-04-14 03:10 UTC  build40 mica-transparent-frame'
+$script:VigilVersion = '2026-04-14 03:10 UTC  build41 dwm-extend-frame'
 
 $ErrorActionPreference = 'Stop'
 
@@ -36,15 +36,24 @@ if ($script:IsWindowsHost -and -not ([System.Management.Automation.PSTypeName]'V
     Add-Type -ErrorAction Stop -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
+[StructLayout(LayoutKind.Sequential)]
+public struct VigilMargins {
+    public int cxLeftWidth;
+    public int cxRightWidth;
+    public int cyTopHeight;
+    public int cyBottomHeight;
+}
 public class VigilWin32 {
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     public static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
     [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
     [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
-    // DWM Mica / Acrylic backdrop (Win11 22000+, .NET 9+ WPF)
+    // DWM backdrop APIs (Win11 22000+, .NET 9+ WPF)
     [DllImport("dwmapi.dll")]
     public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+    [DllImport("dwmapi.dll")]
+    public static extern int DwmExtendFrameIntoClientArea(IntPtr hWnd, ref VigilMargins pMarInset);
 }
 "@
 }
@@ -929,9 +938,16 @@ $xaml = @'
             <ColumnDefinition Width="Auto"/>
           </Grid.ColumnDefinitions>
 
-          <TextBlock Grid.Column="0" Text="VIGIL" FontSize="11" FontWeight="Bold"
-                     FontFamily="Consolas, Cascadia Mono, Courier New"
-                     Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center"/>
+          <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+            <TextBlock Text="VIGIL" FontSize="11" FontWeight="Bold"
+                       FontFamily="Consolas, Cascadia Mono, Courier New"
+                       Foreground="{StaticResource TextPrimary}"/>
+            <TextBlock x:Name="FluentLabel" Text="..."
+                       FontSize="8" FontWeight="Bold" Margin="8,0,0,0"
+                       FontFamily="Consolas, Cascadia Mono, Courier New"
+                       Foreground="{StaticResource TextTertiary}"
+                       VerticalAlignment="Center"/>
+          </StackPanel>
 
           <Border Grid.Column="1" x:Name="CountBadge" Background="{StaticResource Accent}"
                   CornerRadius="0" Padding="5,1" Margin="8,0,0,0"
@@ -1026,6 +1042,7 @@ $reader = New-Object System.Xml.XmlNodeReader $xml
 $window = [Windows.Markup.XamlReader]::Load($reader)
 
 $OuterFrame  = $window.FindName('OuterFrame')
+$FluentLabel = $window.FindName('FluentLabel')
 $TitleBar    = $window.FindName('TitleBar')
 $BtnCollapse = $window.FindName('BtnCollapse')
 $BtnClose    = $window.FindName('BtnClose')
@@ -1824,17 +1841,28 @@ $window.Add_Loaded({
         $dark = 1
         [void][VigilWin32]::DwmSetWindowAttribute($h, 20, [ref]$dark, 4)
         if ($script:HasFluent) {
+            # Mica needs an extended frame to draw on. Sheet-of-glass = (-1,-1,-1,-1).
+            $margins = New-Object VigilMargins
+            $margins.cxLeftWidth = -1
+            $margins.cxRightWidth = -1
+            $margins.cyTopHeight = -1
+            $margins.cyBottomHeight = -1
+            [void][VigilWin32]::DwmExtendFrameIntoClientArea($h, [ref]$margins)
             # DWMSBT_MAINWINDOW = 2 -> Mica backdrop tinted by desktop wallpaper
             $backdrop = 2
             $rc = [VigilWin32]::DwmSetWindowAttribute($h, 38, [ref]$backdrop, 4)
             if ($rc -eq 0) {
                 Write-VigilLog 'Fluent: Mica backdrop applied'
+                if ($FluentLabel) { $FluentLabel.Text = 'MICA' }
             } else {
-                Write-VigilLog ('Fluent: Mica DWM call returned 0x{0:X}' -f $rc)
+                $rcMsg = 'Fluent: Mica DWM call returned 0x{0:X}' -f $rc
+                Write-VigilLog $rcMsg
+                if ($FluentLabel) { $FluentLabel.Text = ('ERR ' + ('{0:X}' -f $rc)) }
             }
         } else {
             $dmsg = 'Fluent: not available | ' + $script:FluentDiag
             Write-VigilLog $dmsg
+            if ($FluentLabel) { $FluentLabel.Text = 'FLAT' }
         }
     } catch {
         $em = 'Fluent setup error: ' + $_.Exception.Message
