@@ -13,7 +13,7 @@ param(
 
 # Build stamp - bumped on every commit. Visible in status bar + vigil.log.
 # Format: YYYY-MM-DD HH:MM (UTC)  buildN
-$script:VigilVersion = '2026-04-14 03:10 UTC  build35 tactical-monochrome'
+$script:VigilVersion = '2026-04-14 03:10 UTC  build36 fluent-mica'
 
 $ErrorActionPreference = 'Stop'
 
@@ -31,7 +31,7 @@ if ($script:IsWindowsHost) {
     Add-Type -AssemblyName System.Windows.Forms
 }
 
-# --- Win32 P/Invoke (foreground tracking + window activation) --------------
+# --- Win32 P/Invoke (foreground tracking + window activation + DWM Mica) ---
 if ($script:IsWindowsHost -and -not ([System.Management.Automation.PSTypeName]'VigilWin32').Type) {
     Add-Type -ErrorAction Stop -TypeDefinition @"
 using System;
@@ -42,8 +42,26 @@ public class VigilWin32 {
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
     [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
     [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+    // DWM Mica / Acrylic backdrop (Win11 22000+, .NET 9+ WPF)
+    [DllImport("dwmapi.dll")]
+    public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
 }
 "@
+}
+
+# --- Fluent (Mica + dark title bar) capability detection ------------------
+# Requires pwsh 7.5+, .NET 9+, Windows 11 (build 22000+).
+$script:HasFluent = $false
+if ($script:IsWindowsHost) {
+    try {
+        $psVer = $PSVersionTable.PSVersion
+        $netVer = [Environment]::Version
+        $winBuild = [Environment]::OSVersion.Version.Build
+        $psOk = ($psVer.Major -gt 7) -or ($psVer.Major -eq 7 -and $psVer.Minor -ge 5)
+        if ($psOk -and $netVer.Major -ge 9 -and $winBuild -ge 22000) {
+            $script:HasFluent = $true
+        }
+    } catch {}
 }
 
 # --- Hotkey helper (C# bridge so PS avoids HwndSourceHook ref-delegate cast)
@@ -721,7 +739,7 @@ $xaml = @'
         Title="VIGIL"
         Width="360" SizeToContent="Height"
         WindowStyle="None" ResizeMode="NoResize"
-        AllowsTransparency="True" Background="Transparent"
+        AllowsTransparency="False" Background="{x:Null}"
         Topmost="True" ShowInTaskbar="False"
         TextOptions.TextFormattingMode="Ideal"
         TextOptions.TextRenderingMode="Grayscale"
@@ -840,12 +858,8 @@ $xaml = @'
 
   </Window.Resources>
 
-  <Border CornerRadius="0" Background="{StaticResource SurfaceBase}"
-          BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1"
-          Margin="12">
-    <Border.Effect>
-      <DropShadowEffect Color="#000000" BlurRadius="24" ShadowDepth="0" Opacity="0.55"/>
-    </Border.Effect>
+  <Border x:Name="OuterFrame" CornerRadius="0" Background="{StaticResource SurfaceBase}"
+          BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1">
     <Grid>
       <Grid.RowDefinitions>
         <RowDefinition Height="Auto"/>
@@ -963,6 +977,7 @@ $xaml = @'
 $reader = New-Object System.Xml.XmlNodeReader $xml
 $window = [Windows.Markup.XamlReader]::Load($reader)
 
+$OuterFrame  = $window.FindName('OuterFrame')
 $TitleBar    = $window.FindName('TitleBar')
 $BtnCollapse = $window.FindName('BtnCollapse')
 $BtnClose    = $window.FindName('BtnClose')
@@ -1739,6 +1754,34 @@ $script:HotkeyRegistered = $false
 [VigilHotkey]::add_HotkeyPressed({
     try { Show-QuickAdd } catch {
         $em = 'Hotkey handler error: ' + $_.Exception.Message
+        Write-VigilLog $em
+    }
+})
+
+# --- Fluent / Mica: dark title bar + Mica backdrop (Win11, .NET 9+ only) ---
+$window.Add_Loaded({
+    try {
+        $h = (New-Object System.Windows.Interop.WindowInteropHelper($window)).Handle
+        # Always try the dark title bar (works on Win10 2004+ with .NET 4.8+, safe on older)
+        $dark = 1
+        [void][VigilWin32]::DwmSetWindowAttribute($h, 20, [ref]$dark, 4)
+        if ($script:HasFluent) {
+            # DWMSBT_MAINWINDOW = 2 -> Mica backdrop tinted by desktop wallpaper
+            $backdrop = 2
+            $rc = [VigilWin32]::DwmSetWindowAttribute($h, 38, [ref]$backdrop, 4)
+            if ($rc -eq 0) {
+                # Semi-transparent dark overlay so Mica shines through the frame
+                $OuterFrame.Background = New-Object System.Windows.Media.SolidColorBrush(
+                    [System.Windows.Media.Color]::FromArgb(195, 10, 10, 10))
+                Write-VigilLog 'Fluent: Mica backdrop applied'
+            } else {
+                Write-VigilLog ('Fluent: Mica DWM call returned 0x{0:X}' -f $rc)
+            }
+        } else {
+            Write-VigilLog 'Fluent: not available (pwsh/.NET/Win build below threshold)'
+        }
+    } catch {
+        $em = 'Fluent setup error: ' + $_.Exception.Message
         Write-VigilLog $em
     }
 })
