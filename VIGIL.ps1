@@ -13,7 +13,7 @@ param(
 
 # Build stamp - bumped on every commit. Visible in status bar + vigil.log.
 # Format: YYYY-MM-DD HH:MM (UTC)  buildN
-$script:VigilVersion = '2026-04-13 16:00 UTC  build64 script-dir-storage'
+$script:VigilVersion = '2026-04-13 16:15 UTC  build65 badge-click-tunnel'
 
 $ErrorActionPreference = 'Stop'
 
@@ -1685,6 +1685,7 @@ $BtnShowDone.Add_Click({
 $badgeClick = {
     param($s, $e)
     $mode = [string]$s.Tag
+    Write-VigilLog ('Badge click: tag=' + $mode)
     if (-not $mode) { return }
     if ([string]$Global:VigilSettings.activeFilter -eq $mode) {
         $Global:VigilSettings.activeFilter = 'all'
@@ -1693,11 +1694,12 @@ $badgeClick = {
     }
     Save-VigilSettings $Global:VigilSettings
     Refresh-Render
+    $e.Handled = $true
 }
-$CountCalBadge.Add_MouseLeftButtonUp($badgeClick)
-$CountTaskBadge.Add_MouseLeftButtonUp($badgeClick)
-$CountCritBadge.Add_MouseLeftButtonUp($badgeClick)
-$CountHighBadge.Add_MouseLeftButtonUp($badgeClick)
+$CountCalBadge.Add_PreviewMouseLeftButtonDown($badgeClick)
+$CountTaskBadge.Add_PreviewMouseLeftButtonDown($badgeClick)
+$CountCritBadge.Add_PreviewMouseLeftButtonDown($badgeClick)
+$CountHighBadge.Add_PreviewMouseLeftButtonDown($badgeClick)
 
 $sortMenu.Items.Add((New-Object System.Windows.Controls.Separator)) | Out-Null
 & $addHeader 'ACTIONS'
