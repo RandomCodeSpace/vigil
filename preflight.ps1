@@ -272,7 +272,76 @@ try {
     Write-Check 'ExecutionPolicy allows script run' $false $_.Exception.Message
 }
 
-# 20. Cascadia Mono / Consolas font available (§5.1)
+# --- Corporate lockdown checks (firewall / GPO / AppLocker / WDAC) ---
+
+# 20. Constrained Language Mode — the #1 corp-lockdown killer for VIGIL.
+#     CLM blocks Add-Type, New-Object COM, and all P/Invoke. If this fails,
+#     VIGIL cannot run on this machine at all and needs IT intervention.
+try {
+    $mode = $ExecutionContext.SessionState.LanguageMode
+    $ok = ($mode -eq 'FullLanguage')
+    $detail = "LanguageMode = $mode"
+    if (-not $ok) { $detail += ' — blocks Add-Type, COM, P/Invoke. VIGIL cannot run.' }
+    Write-Check 'PowerShell FullLanguage mode (not CLM)' $ok $detail
+} catch {
+    Write-Check 'PowerShell FullLanguage mode (not CLM)' $false $_.Exception.Message
+}
+
+# 21. AppLocker script rules — would block running VIGIL.ps1 from user profile.
+try {
+    $testPath = Join-Path $env:USERPROFILE '.vigil\VIGIL.ps1'
+    if (-not (Test-Path (Split-Path $testPath))) {
+        New-Item -ItemType Directory -Path (Split-Path $testPath) -Force | Out-Null
+    }
+    if (-not (Test-Path $testPath)) { Set-Content -Path $testPath -Value '# probe' -Encoding UTF8 }
+    $applockerCmd = Get-Command Test-AppLockerPolicy -ErrorAction SilentlyContinue
+    if ($applockerCmd) {
+        $r = Test-AppLockerPolicy -Path $testPath -User $env:USERNAME -ErrorAction Stop
+        $allowed = ($r.PolicyDecision -eq 'Allowed' -or $r.PolicyDecision -eq 'AllowedByDefault')
+        Write-Check 'AppLocker allows .ps1 from user profile' $allowed "PolicyDecision = $($r.PolicyDecision)"
+    } else {
+        Write-Check 'AppLocker allows .ps1 from user profile' $true 'Test-AppLockerPolicy not available — assuming no AppLocker'
+    }
+} catch {
+    Write-Check 'AppLocker allows .ps1 from user profile' $false $_.Exception.Message
+}
+
+# 22. AMSI / EDR does not flag inline C# Add-Type (used for P/Invoke).
+#     If aggressive EDR blocks Add-Type, VIGIL's hotkey + window activation die.
+try {
+    Add-Type -ErrorAction Stop -TypeDefinition @"
+public class VigilAmsiProbe { public static int Answer() { return 42; } }
+"@
+    $ok = ([VigilAmsiProbe]::Answer() -eq 42)
+    Write-Check 'Add-Type inline C# not blocked by AMSI/EDR' $ok 'Required for hotkey + FindWindow P/Invoke'
+} catch {
+    Write-Check 'Add-Type inline C# not blocked by AMSI/EDR' $false $_.Exception.Message
+}
+
+# 23. Office COM automation permitted by GPO.
+#     Some corp policies disable ProgID registration for Outlook.Application.
+try {
+    $progId = [Type]::GetTypeFromProgID('Outlook.Application')
+    $ok = ($null -ne $progId)
+    Write-Check 'Outlook.Application ProgID registered' $ok 'GPO may block Office COM automation'
+} catch {
+    Write-Check 'Outlook.Application ProgID registered' $false $_.Exception.Message
+}
+
+# 24. Windows Defender real-time scan not blocking ~/.vigil
+#     Some EDRs quarantine scripts under %USERPROFILE% as untrusted.
+try {
+    $probe = Join-Path $env:USERPROFILE '.vigil\.defender-probe.ps1'
+    Set-Content -Path $probe -Value '# harmless probe' -Encoding UTF8
+    Start-Sleep -Milliseconds 200
+    $stillThere = Test-Path $probe
+    if ($stillThere) { Remove-Item $probe -Force }
+    Write-Check 'Defender/EDR does not quarantine ~/.vigil scripts' $stillThere 'Probe file survived write+read cycle'
+} catch {
+    Write-Check 'Defender/EDR does not quarantine ~/.vigil scripts' $false $_.Exception.Message
+}
+
+# 25. Cascadia Mono / Consolas font available (§5.1)
 try {
     Add-Type -AssemblyName System.Drawing -ErrorAction Stop
     $installed = (New-Object System.Drawing.Text.InstalledFontCollection).Families | ForEach-Object { $_.Name }
