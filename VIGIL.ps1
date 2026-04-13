@@ -13,7 +13,7 @@ param(
 
 # Build stamp - bumped on every commit. Visible in status bar + vigil.log.
 # Format: YYYY-MM-DD HH:MM (UTC)  buildN
-$script:VigilVersion = '2026-04-13 15:40 UTC  build62 pwsh-required'
+$script:VigilVersion = '2026-04-13 15:50 UTC  build63 script-dir-fallback'
 
 $ErrorActionPreference = 'Stop'
 
@@ -151,6 +151,13 @@ function Resolve-VigilStorageRoot {
         $env:OneDrive
     ) | Where-Object { $_ -and (Test-Path $_) }
     if ($candidates.Count -gt 0) { return $candidates[0] }
+    # Fallback: script directory (co-located tasks/settings next to VIGIL.ps1)
+    $scriptPath = $PSCommandPath
+    if (-not $scriptPath) { $scriptPath = $MyInvocation.MyCommand.Path }
+    if ($scriptPath) {
+        $scriptDir = Split-Path -Parent $scriptPath
+        if ($scriptDir -and (Test-Path $scriptDir)) { return $scriptDir }
+    }
     return $script:UserHome
 }
 
