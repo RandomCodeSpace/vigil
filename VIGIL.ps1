@@ -13,7 +13,7 @@ param(
 
 # Build stamp - bumped on every commit. Visible in status bar + vigil.log.
 # Format: YYYY-MM-DD HH:MM (UTC)  buildN
-$script:VigilVersion = '2026-04-14 03:10 UTC  build53 unified-toolbar-icon'
+$script:VigilVersion = '2026-04-14 03:10 UTC  build54 tabs-filter-criticality'
 
 $ErrorActionPreference = 'Stop'
 
@@ -865,6 +865,30 @@ $xaml = @'
                            VerticalAlignment="Center"/>
               </StackPanel>
             </Border>
+            <Border x:Name="CountCritBadge" Background="{DynamicResource SystemFillColorCriticalBrush}"
+                    CornerRadius="0" Padding="8,2" Margin="6,0,0,0" Height="22"
+                    VerticalAlignment="Center" MinWidth="44" ToolTip="Critical / overdue tasks">
+              <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock Text="CRIT " FontSize="9" FontWeight="Bold" Opacity="0.85"
+                           FontFamily="Consolas, Cascadia Mono, Courier New"
+                           Foreground="#FFFFFF" VerticalAlignment="Center"/>
+                <TextBlock x:Name="CountCritText" Text="0" FontSize="9" FontWeight="Bold"
+                           FontFamily="Consolas, Cascadia Mono, Courier New"
+                           Foreground="#FFFFFF" VerticalAlignment="Center"/>
+              </StackPanel>
+            </Border>
+            <Border x:Name="CountHighBadge" Background="{DynamicResource SystemFillColorCautionBrush}"
+                    CornerRadius="0" Padding="8,2" Margin="6,0,0,0" Height="22"
+                    VerticalAlignment="Center" MinWidth="44" ToolTip="High priority tasks">
+              <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock Text="HIGH " FontSize="9" FontWeight="Bold" Opacity="0.85"
+                           FontFamily="Consolas, Cascadia Mono, Courier New"
+                           Foreground="#000000" VerticalAlignment="Center"/>
+                <TextBlock x:Name="CountHighText" Text="0" FontSize="9" FontWeight="Bold"
+                           FontFamily="Consolas, Cascadia Mono, Courier New"
+                           Foreground="#000000" VerticalAlignment="Center"/>
+              </StackPanel>
+            </Border>
           </StackPanel>
 
           <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
@@ -876,31 +900,47 @@ $xaml = @'
                     Height="22" Padding="8,0" FontSize="9"
                     FontFamily="Consolas, Cascadia Mono, Courier New"
                     Margin="0,0,4,0" ToolTip="Sort / Filter"/>
-            <Button x:Name="BtnInfo" Content="&#xE946;"
-                    Height="22" Width="28" Padding="0" FontSize="11"
-                    FontFamily="Segoe MDL2 Assets"
-                    ToolTip="Keyboard shortcuts &amp; guide"/>
+            <Button x:Name="BtnFilter" Content="ALL"
+                    Height="22" Padding="8,0" FontSize="9"
+                    FontFamily="Consolas, Cascadia Mono, Courier New"
+                    ToolTip="Filter tasks"/>
           </StackPanel>
         </Grid>
       </Border>
 
-      <!-- Task list area -->
+      <!-- Task list area: tabbed (TASKS | CALENDAR) -->
       <Border Grid.Row="1" x:Name="TaskArea" Background="Transparent">
         <DockPanel>
           <TextBox x:Name="SearchInput" DockPanel.Dock="Top"
                    Margin="12,8,12,4" FontSize="12"
                    VerticalContentAlignment="Center"
                    ToolTip="Filter tasks by title or notes (Ctrl+F)"/>
-          <ScrollViewer MaxHeight="420" VerticalScrollBarVisibility="Auto"
-                        HorizontalScrollBarVisibility="Disabled" Padding="0,2,0,0">
-            <ItemsControl x:Name="TaskList">
-              <ItemsControl.ItemsPanel>
-                <ItemsPanelTemplate>
-                  <StackPanel/>
-                </ItemsPanelTemplate>
-              </ItemsControl.ItemsPanel>
-            </ItemsControl>
-          </ScrollViewer>
+          <TabControl x:Name="TaskTabs" Background="Transparent" BorderThickness="0">
+            <TabItem Header="TASKS" FontFamily="Consolas, Cascadia Mono, Courier New" FontSize="10">
+              <ScrollViewer MaxHeight="400" VerticalScrollBarVisibility="Auto"
+                            HorizontalScrollBarVisibility="Disabled" Padding="0,2,0,0">
+                <ItemsControl x:Name="TaskList">
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                      <StackPanel/>
+                    </ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
+                </ItemsControl>
+              </ScrollViewer>
+            </TabItem>
+            <TabItem Header="CALENDAR" FontFamily="Consolas, Cascadia Mono, Courier New" FontSize="10">
+              <ScrollViewer MaxHeight="400" VerticalScrollBarVisibility="Auto"
+                            HorizontalScrollBarVisibility="Disabled" Padding="0,2,0,0">
+                <ItemsControl x:Name="CalList">
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                      <StackPanel/>
+                    </ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
+                </ItemsControl>
+              </ScrollViewer>
+            </TabItem>
+          </TabControl>
         </DockPanel>
       </Border>
 
@@ -940,13 +980,19 @@ $TitleBar    = $window.FindName('TitleBar')
 $SearchInput = $window.FindName('SearchInput')
 $BtnSort     = $window.FindName('BtnSort')
 $BtnSync     = $window.FindName('BtnSync')
-$BtnInfo     = $window.FindName('BtnInfo')
+$BtnFilter   = $window.FindName('BtnFilter')
 $TaskArea    = $window.FindName('TaskArea')
 $TaskList    = $window.FindName('TaskList')
+$CalList     = $window.FindName('CalList')
+$TaskTabs    = $window.FindName('TaskTabs')
 $CountCalText   = $window.FindName('CountCalText')
 $CountCalBadge  = $window.FindName('CountCalBadge')
 $CountTaskText  = $window.FindName('CountTaskText')
 $CountTaskBadge = $window.FindName('CountTaskBadge')
+$CountCritText  = $window.FindName('CountCritText')
+$CountCritBadge = $window.FindName('CountCritBadge')
+$CountHighText  = $window.FindName('CountHighText')
+$CountHighBadge = $window.FindName('CountHighBadge')
 $StatusArea  = $window.FindName('StatusArea')
 $StatusLeft  = $window.FindName('StatusLeft')
 $StatusRight = $window.FindName('StatusRight')
@@ -1174,6 +1220,7 @@ $script:SortLabels = @{
 
 function Refresh-Render {
     $TaskList.Items.Clear()
+    $CalList.Items.Clear()
     $tasks = $Global:VigilTasks
     if (-not $Global:VigilSettings.showCompleted) {
         $tasks = @($tasks | Where-Object { -not $_.done })
@@ -1189,52 +1236,37 @@ function Refresh-Render {
     if ($Global:VigilSettings.sortMode) { $sortMode = [string]$Global:VigilSettings.sortMode }
     $sorted = Sort-VigilTasks -tasks $tasks -mode $sortMode
 
-    # Group sorted tasks by source category and render with section headers.
-    # Order: Calendar -> Flagged -> Outlook tasks -> Manual.
-    $buckets = @{
-        'outlook-cal'  = @()
-        'outlook-flag' = @()
-        'outlook-task' = @()
-        'manual'       = @()
-    }
+    # Split sorted tasks into the two tabs: calendar items vs everything else
     foreach ($t in $sorted) {
-        $key = 'manual'
-        if ($t.source -and $buckets.ContainsKey([string]$t.source)) { $key = [string]$t.source }
-        $buckets[$key] += $t
-    }
-    $sectionOrder = @(
-        @{ key = 'outlook-cal';  label = 'CALENDAR' }
-        @{ key = 'outlook-flag'; label = 'FLAGGED EMAILS' }
-        @{ key = 'outlook-task'; label = 'OUTLOOK TASKS' }
-        @{ key = 'manual';       label = 'TASKS' }
-    )
-    $isFirst = $true
-    foreach ($section in $sectionOrder) {
-        $items = $buckets[$section.key]
-        if (-not $items -or $items.Count -eq 0) { continue }
-        $hdr = New-Object System.Windows.Controls.TextBlock
-        $hdr.Text = $section.label
-        $hdr.FontFamily = New-Object System.Windows.Media.FontFamily('Consolas')
-        $hdr.FontSize = 10
-        $hdr.FontWeight = 'Bold'
-        $hdr.Opacity = 0.55
-        $topMargin = if ($isFirst) { 8 } else { 14 }
-        $hdr.Margin = New-Object System.Windows.Thickness(14, $topMargin, 14, 4)
-        $TaskList.Items.Add($hdr) | Out-Null
-        foreach ($t in $items) {
-            $card = Build-TaskCard $t
+        $card = Build-TaskCard $t
+        if ($t.source -eq 'outlook-cal') {
+            $CalList.Items.Add($card) | Out-Null
+        } else {
             $TaskList.Items.Add($card) | Out-Null
         }
-        $isFirst = $false
     }
     $active = @($Global:VigilTasks | Where-Object { -not $_.done }).Count
     $activeAll = @($Global:VigilTasks | Where-Object { -not $_.done })
+    $now2 = Get-Date
     $calCount  = @($activeAll | Where-Object { $_.source -eq 'outlook-cal' }).Count
     $taskCount = @($activeAll | Where-Object { $_.source -ne 'outlook-cal' }).Count
+    $critCount = 0; $highCount = 0
+    foreach ($t in $activeAll) {
+        $isOver = $false
+        if ($t.dueDate) {
+            try { if ([datetime]::Parse($t.dueDate) -lt $now2) { $isOver = $true } } catch {}
+        }
+        if ($t.priority -eq 'critical' -or $isOver) { $critCount++ }
+        elseif ($t.priority -eq 'high')             { $highCount++ }
+    }
     $CountCalText.Text  = [string]$calCount
     $CountTaskText.Text = [string]$taskCount
+    $CountCritText.Text = [string]$critCount
+    $CountHighText.Text = [string]$highCount
     $CountCalBadge.Visibility  = if ($calCount  -gt 0) { 'Visible' } else { 'Collapsed' }
     $CountTaskBadge.Visibility = if ($taskCount -gt 0) { 'Visible' } else { 'Collapsed' }
+    $CountCritBadge.Visibility = if ($critCount -gt 0) { 'Visible' } else { 'Collapsed' }
+    $CountHighBadge.Visibility = if ($highCount -gt 0) { 'Visible' } else { 'Collapsed' }
 
     $rightText = ('{0} active' -f $active)
     if ($Global:VigilSettings.lastSyncTime) {
@@ -1473,7 +1505,7 @@ $script:ToggleCompactFn = {
         $CountTaskBadge.Visibility = 'Visible'
         $BtnSort.Visibility    = 'Visible'
         $BtnSync.Visibility    = 'Visible'
-        $BtnInfo.Visibility    = 'Visible'
+        $BtnFilter.Visibility  = 'Visible'
         $window.Opacity = 1.0
         $script:IsCollapsed = $false
     } else {
@@ -1481,7 +1513,7 @@ $script:ToggleCompactFn = {
         $StatusArea.Visibility = 'Collapsed'
         $BtnSort.Visibility    = 'Collapsed'
         $BtnSync.Visibility    = 'Collapsed'
-        $BtnInfo.Visibility    = 'Collapsed'
+        $BtnFilter.Visibility  = 'Collapsed'
         $window.Opacity = 0.65
         $script:IsCollapsed = $true
     }
@@ -1553,8 +1585,8 @@ foreach ($opt in $sortModes) {
     $sortMenu.Items.Add($mi) | Out-Null
 }
 
-$sortMenu.Items.Add((New-Object System.Windows.Controls.Separator)) | Out-Null
-& $addHeader 'FILTER'
+# Filter dropdown - its own ContextMenu attached to BtnFilter
+$filterMenu = New-Object System.Windows.Controls.ContextMenu
 $filterModes = @(
     @{ key = 'all';     label = 'All tasks' }
     @{ key = 'manual';  label = 'Manual only' }
@@ -1572,8 +1604,13 @@ foreach ($opt in $filterModes) {
         Save-VigilSettings $Global:VigilSettings
         Refresh-Render
     })
-    $sortMenu.Items.Add($mi) | Out-Null
+    $filterMenu.Items.Add($mi) | Out-Null
 }
+$BtnFilter.Add_Click({
+    $filterMenu.PlacementTarget = $BtnFilter
+    $filterMenu.Placement = 'Bottom'
+    $filterMenu.IsOpen = $true
+})
 
 $sortMenu.Items.Add((New-Object System.Windows.Controls.Separator)) | Out-Null
 & $addHeader 'ACTIONS'
@@ -1609,8 +1646,6 @@ $BtnSort.Add_Click({
     $sortMenu.IsOpen = $true
 })
 
-# Info button shows the welcome / shortcuts dialog on demand
-$BtnInfo.Add_Click({ Show-VigilWelcome -Force })
 
 # Sync button wiring
 # Keyboard nav over task rows: Up/Down move selection, Space toggle done,
