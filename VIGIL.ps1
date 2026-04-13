@@ -1,4 +1,4 @@
-# VIGIL — Personal Task Command Center
+﻿# VIGIL — Personal Task Command Center
 # Phase 1: widget + data layer + Apple-styled UI (reduce-motion variant)
 #
 # Environment requirements verified by preflight.ps1 (schema v2, 58/60):
@@ -126,7 +126,7 @@ function Load-VigilTasks {
             continue
         }
     }
-    Write-VigilLog "Load: both primary and backup failed — returning empty"
+    Write-VigilLog 'Load: both primary and backup failed - returning empty'
     return @()
 }
 
@@ -445,7 +445,7 @@ function Build-TaskCard($task) {
     if ($task.source -ne 'manual') { $metaText += $task.source }
     if ($metaText.Count -gt 0) {
         $meta = New-Object System.Windows.Controls.TextBlock
-        $meta.Text = ($metaText -join ' · ')
+        $meta.Text = ($metaText -join '  |  ')
         $meta.FontSize = 12
         $meta.Margin = New-Object System.Windows.Thickness(0,3,0,0)
         if ($isOverdue) {
