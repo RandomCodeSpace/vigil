@@ -13,7 +13,7 @@ param(
 
 # Build stamp - bumped on every commit. Visible in status bar + vigil.log.
 # Format: YYYY-MM-DD HH:MM (UTC)  buildN
-$script:VigilVersion = '2026-04-13 15:15 UTC  build60 pinned-badges'
+$script:VigilVersion = '2026-04-13 15:30 UTC  build61 onedrive-storage'
 
 $ErrorActionPreference = 'Stop'
 
@@ -140,15 +140,40 @@ if ($script:IsWindowsHost -and -not $NoUI) {
 }
 
 # --- Paths -----------------------------------------------------------------
-$script:UserHome     = [Environment]::GetFolderPath('UserProfile')
+# Storage root priority: OneDrive (Commercial > Consumer > generic) -> UserProfile ($HOME on Linux).
+$script:UserHome = [Environment]::GetFolderPath('UserProfile')
 if (-not $script:UserHome) { $script:UserHome = $HOME }
-$script:VigilDir     = Join-Path $script:UserHome '.vigil'
+
+function Resolve-VigilStorageRoot {
+    $candidates = @(
+        $env:OneDriveCommercial
+        $env:OneDriveConsumer
+        $env:OneDrive
+    ) | Where-Object { $_ -and (Test-Path $_) }
+    if ($candidates.Count -gt 0) { return $candidates[0] }
+    return $script:UserHome
+}
+
+$script:StorageRoot  = Resolve-VigilStorageRoot
+$script:VigilDir     = Join-Path $script:StorageRoot '.vigil'
 $script:TasksPath    = Join-Path $script:VigilDir 'tasks.json'
 $script:BackupPath   = Join-Path $script:VigilDir 'tasks.backup.json'
 $script:TmpPath      = Join-Path $script:VigilDir 'tasks.tmp.json'
 $script:SettingsPath = Join-Path $script:VigilDir 'settings.json'
 $script:LogPath      = Join-Path $script:VigilDir 'vigil.log'
 if (-not (Test-Path $script:VigilDir)) { New-Item -ItemType Directory -Path $script:VigilDir -Force | Out-Null }
+
+# One-time migration: if a legacy ~/.vigil exists and the new root differs, copy files over.
+$script:LegacyVigilDir = Join-Path $script:UserHome '.vigil'
+if ($script:LegacyVigilDir -ne $script:VigilDir -and (Test-Path $script:LegacyVigilDir)) {
+    foreach ($f in 'tasks.json','settings.json','tasks.backup.json') {
+        $src = Join-Path $script:LegacyVigilDir $f
+        $dst = Join-Path $script:VigilDir $f
+        if ((Test-Path $src) -and -not (Test-Path $dst)) {
+            try { Copy-Item -LiteralPath $src -Destination $dst -Force } catch {}
+        }
+    }
+}
 
 function Write-VigilLog([string]$msg) {
     $ts = Get-Date -Format 'yyyy-MM-ddTHH:mm:ss'
@@ -703,6 +728,35 @@ function Install-VigilStartupShortcut {
     } catch {
         $em = 'Startup shortcut install failed: ' + $_.Exception.Message
         Write-VigilLog $em
+    }
+}
+
+function Install-VigilDesktopShortcut {
+    if (-not $script:IsWindowsHost) { return }
+    try {
+        $desktopDir = [Environment]::GetFolderPath('Desktop')
+        if (-not $desktopDir -or -not (Test-Path $desktopDir)) { return }
+        $lnkPath = Join-Path $desktopDir 'VIGIL.lnk'
+        if (Test-Path $lnkPath) { return }
+        $launcher = Find-VigilPwshExe
+        if (-not $launcher) { $launcher = Join-Path $PSHOME 'powershell.exe' }
+        $scriptPath = $PSCommandPath
+        if (-not $scriptPath) { $scriptPath = $MyInvocation.MyCommand.Path }
+        $wsh = New-Object -ComObject WScript.Shell
+        try {
+            $shortcut = $wsh.CreateShortcut($lnkPath)
+            $shortcut.TargetPath = $launcher
+            $shortcut.Arguments = '-ExecutionPolicy Bypass -WindowStyle Hidden -File "' + $scriptPath + '"'
+            $shortcut.WorkingDirectory = Split-Path $scriptPath
+            $shortcut.Description = 'VIGIL - Personal Task Command Center'
+            $shortcut.WindowStyle = 7
+            $shortcut.Save()
+        } finally {
+            try { [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($wsh) } catch {}
+        }
+        Write-VigilLog ('Desktop shortcut installed: ' + $lnkPath)
+    } catch {
+        Write-VigilLog ('Desktop shortcut install failed: ' + $_.Exception.Message)
     }
 }
 
@@ -2197,6 +2251,7 @@ $window.Add_Loaded({ Show-VigilOverdueBalloon })
 
 # --- Phase 4: auto-start shortcut (first-run silent install) ---
 Install-VigilStartupShortcut
+Install-VigilDesktopShortcut
 
 # --- Phase 5: first-run welcome dialog (shows once) ---
 $window.Add_ContentRendered({ Show-VigilWelcome }.GetNewClosure())
