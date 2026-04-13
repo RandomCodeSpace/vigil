@@ -12,7 +12,7 @@ param()
 
 # Build stamp - bumped on every commit. Visible in status bar + vigil.log.
 # Format: YYYY-MM-DD HH:MM (UTC)  buildN
-$script:VigilVersion = '2026-04-13 23:15 UTC  build22 phase2-hotkey'
+$script:VigilVersion = '2026-04-13 23:45 UTC  build23 event-sender-fix'
 
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName PresentationFramework
@@ -627,7 +627,7 @@ function Build-TaskCard($task) {
         $mi = New-Object System.Windows.Controls.MenuItem
         $mi.Header = $p
         $mi.Tag = @{ id = $task.id; action = 'priority'; value = $p }
-        $mi.Add_Click({ Handle-ContextAction $this.Tag })
+        $mi.Add_Click({ param($s, $e) Handle-ContextAction $s.Tag })
         $prioRoot.Items.Add($mi) | Out-Null
     }
     $menu.Items.Add($prioRoot) | Out-Null
@@ -655,7 +655,7 @@ function Build-TaskCard($task) {
         $mi = New-Object System.Windows.Controls.MenuItem
         $mi.Header = $opt.label
         $mi.Tag = @{ id = $task.id; action = 'due'; value = $opt.when }
-        $mi.Add_Click({ Handle-ContextAction $this.Tag })
+        $mi.Add_Click({ param($s, $e) Handle-ContextAction $s.Tag })
         $dueRoot.Items.Add($mi) | Out-Null
     }
     $menu.Items.Add($dueRoot) | Out-Null
@@ -665,7 +665,7 @@ function Build-TaskCard($task) {
     $delItem = New-Object System.Windows.Controls.MenuItem
     $delItem.Header = 'Delete'
     $delItem.Tag = @{ id = $task.id; action = 'delete' }
-    $delItem.Add_Click({ Handle-ContextAction $this.Tag })
+    $delItem.Add_Click({ param($s, $e) Handle-ContextAction $s.Tag })
     $menu.Items.Add($delItem) | Out-Null
     $border.ContextMenu = $menu
 
@@ -778,7 +778,8 @@ foreach ($opt in $sortModes) {
     $mi.Header = $opt.label
     $mi.Tag = $opt.key
     $mi.Add_Click({
-        $k = $this.Tag
+        param($s, $e)
+        $k = [string]$s.Tag
         $script:Settings.sortMode = $k
         Save-VigilSettings $script:Settings
         Refresh-Render
@@ -939,7 +940,8 @@ function Show-QuickAdd {
             $btn.Cursor = [System.Windows.Input.Cursors]::Hand
             $btn.Tag = $p
             $btn.Add_Click({
-                $script:QuickAddPriority = $this.Tag
+                param($sender, $e)
+                $script:QuickAddPriority = [string]$sender.Tag
                 Update-QuickAddVisuals
             })
             $script:QuickAddPriBtns[$p] = $btn
@@ -966,7 +968,8 @@ function Show-QuickAdd {
             $btn.Cursor = [System.Windows.Input.Cursors]::Hand
             $btn.Tag = $d.key
             $btn.Add_Click({
-                $script:QuickAddDue = $this.Tag
+                param($sender, $e)
+                $script:QuickAddDue = [string]$sender.Tag
                 Update-QuickAddVisuals
             })
             $script:QuickAddDueBtns[$d.label] = $btn
