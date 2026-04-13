@@ -12,7 +12,7 @@ param()
 
 # Build stamp - bumped on every commit. Visible in status bar + vigil.log.
 # Format: YYYY-MM-DD HH:MM (UTC)  buildN
-$script:VigilVersion = '2026-04-14 00:45 UTC  build25 quickadd-state-hashtable'
+$script:VigilVersion = '2026-04-14 01:15 UTC  build26 global-tasks-scope'
 
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName PresentationFramework
@@ -566,7 +566,20 @@ $StatusLeft  = $window.FindName('StatusLeft')
 $StatusRight = $window.FindName('StatusRight')
 
 # --- State -----------------------------------------------------------------
-$script:Tasks    = @(Load-VigilTasks)
+$Global:VigilTasks    = @(Load-VigilTasks)
+
+# Heal any tasks.json that a prior buggy save left in [null, {task}] state
+$cleaned = @()
+foreach ($t in $Global:VigilTasks) {
+    if ($null -ne $t -and $t.id) { $cleaned += $t }
+}
+if ($cleaned.Count -ne $Global:VigilTasks.Count) {
+    $diff = $Global:VigilTasks.Count - $cleaned.Count
+    $m = 'Healed tasks.json: removed {0} null/empty entries' -f $diff
+    Write-VigilLog $m
+    $Global:VigilTasks = $cleaned
+    Save-VigilTasks $Global:VigilTasks
+}
 $script:Settings = Load-VigilSettings
 
 # Restore position (clamped to working area)
@@ -734,7 +747,7 @@ $script:SortLabels = @{
 
 function Refresh-Render {
     $TaskList.Items.Clear()
-    $visible = if ($script:Settings.showCompleted) { $script:Tasks } else { @($script:Tasks | Where-Object { -not $_.done }) }
+    $visible = if ($script:Settings.showCompleted) { $Global:VigilTasks } else { @($Global:VigilTasks | Where-Object { -not $_.done }) }
     $mode = 'smart'
     if ($script:Settings.sortMode) { $mode = [string]$script:Settings.sortMode }
     $sorted = Sort-VigilTasks -tasks $visible -mode $mode
@@ -742,7 +755,7 @@ function Refresh-Render {
         $card = Build-TaskCard $t
         $TaskList.Items.Add($card) | Out-Null
     }
-    $active = @($script:Tasks | Where-Object { -not $_.done }).Count
+    $active = @($Global:VigilTasks | Where-Object { -not $_.done }).Count
     $CountText.Text = [string]$active
     $CountBadge.Visibility = if ($active -gt 0) { 'Visible' } else { 'Collapsed' }
     $StatusRight.Text = ('{0} active' -f $active)
@@ -754,26 +767,26 @@ function Refresh-Render {
 }
 
 function Toggle-Done([string]$id, [bool]$done) {
-    $t = $script:Tasks | Where-Object { $_.id -eq $id }
+    $t = $Global:VigilTasks | Where-Object { $_.id -eq $id }
     if (-not $t) { return }
     $t.done = $done
     $t.doneAt = if ($done) { (Get-Date).ToString('o') } else { '' }
-    Save-VigilTasks $script:Tasks
+    Save-VigilTasks $Global:VigilTasks
     Refresh-Render
 }
 
 function Handle-ContextAction($tag) {
     $id = $tag.id; $action = $tag.action
     if ($action -eq 'delete') {
-        $script:Tasks = @($script:Tasks | Where-Object { $_.id -ne $id })
+        $Global:VigilTasks = @($Global:VigilTasks | Where-Object { $_.id -ne $id })
     } elseif ($action -eq 'priority') {
-        $t = $script:Tasks | Where-Object { $_.id -eq $id }
+        $t = $Global:VigilTasks | Where-Object { $_.id -eq $id }
         if ($t) { $t.priority = $tag.value }
     } elseif ($action -eq 'due') {
-        $t = $script:Tasks | Where-Object { $_.id -eq $id }
+        $t = $Global:VigilTasks | Where-Object { $_.id -eq $id }
         if ($t) { $t.dueDate = $tag.value }
     }
-    Save-VigilTasks $script:Tasks
+    Save-VigilTasks $Global:VigilTasks
     Refresh-Render
 }
 
@@ -834,8 +847,8 @@ $AddFn = {
     $txt = $AddInput.Text.Trim()
     if (-not $txt) { return }
     $new = New-VigilTask -Title $txt -Priority 'normal'
-    $script:Tasks = @($script:Tasks) + @($new)
-    Save-VigilTasks $script:Tasks
+    $Global:VigilTasks = @($Global:VigilTasks) + @($new)
+    Save-VigilTasks $Global:VigilTasks
     $AddInput.Text = ''
     Refresh-Render
 }
@@ -854,7 +867,7 @@ $window.Add_Closing({
 })
 
 # --- Go --------------------------------------------------------------------
-$startMsg = 'VIGIL started. version={0}  tasks={1}' -f $script:VigilVersion, $script:Tasks.Count
+$startMsg = 'VIGIL started. version={0}  tasks={1}' -f $script:VigilVersion, $Global:VigilTasks.Count
 Write-VigilLog $startMsg
 
 # --- Phase 2: Quick-Add popup + global hotkey -----------------------------
@@ -1033,8 +1046,15 @@ function Show-QuickAdd {
                 if ([string]::IsNullOrEmpty($pri)) { $pri = 'normal' }
                 $task = New-VigilTask -Title $t -Priority $pri
                 if ($state.due) { $task.dueDate = [string]$state.due }
-                $script:Tasks = @($script:Tasks) + @($task)
-                Save-VigilTasks $script:Tasks
+                # Defensive: reload from disk so we never append to a stale/null in-memory copy
+                $existing = @(Load-VigilTasks)
+                $merged = @()
+                foreach ($ex in $existing) {
+                    if ($null -ne $ex -and $ex.id) { $merged += $ex }
+                }
+                $merged += $task
+                Save-VigilTasks $merged
+                $Global:VigilTasks = $merged
                 Refresh-Render
                 $qwin.Close()
             } catch {
