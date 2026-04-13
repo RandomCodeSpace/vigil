@@ -35,12 +35,15 @@ Write-Host "VIGIL Pre-Flight Checklist" -ForegroundColor Cyan
 Write-Host "==========================" -ForegroundColor Cyan
 Write-Host ""
 
-# 1. WPF availability
+# 1. WPF availability — silent load + type construction (no MessageBox popup)
 try {
     Add-Type -AssemblyName PresentationFramework -ErrorAction Stop
     Add-Type -AssemblyName PresentationCore      -ErrorAction Stop
     Add-Type -AssemblyName WindowsBase            -ErrorAction Stop
-    [void][System.Windows.MessageBox]::Show('WPF OK', 'VIGIL Pre-Check', 'OK', 'Information')
+    # Construct a WPF type without rendering anything: proves the stack works.
+    $probeWin = New-Object System.Windows.Window
+    $probeWin.Width = 1; $probeWin.Height = 1
+    $probeWin = $null
     Write-Check 'WPF assemblies loadable' $true 'PresentationFramework + PresentationCore + WindowsBase'
 } catch {
     Write-Check 'WPF assemblies loadable' $false $_.Exception.Message
