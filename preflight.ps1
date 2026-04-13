@@ -318,19 +318,24 @@ try {
 }
 
 # 21. AppLocker script rules — would block running VIGIL.ps1 from user profile.
+#     Uses a distinct probe filename so it doesn't collide with a real install
+#     or poison check #55 (prior-install detection). Always cleaned up.
 try {
-    $testPath = Join-Path $env:USERPROFILE '.vigil\VIGIL.ps1'
-    if (-not (Test-Path (Split-Path $testPath))) {
-        New-Item -ItemType Directory -Path (Split-Path $testPath) -Force | Out-Null
-    }
-    if (-not (Test-Path $testPath)) { Set-Content -Path $testPath -Value '# probe' -Encoding UTF8 }
-    $applockerCmd = Get-Command Test-AppLockerPolicy -ErrorAction SilentlyContinue
-    if ($applockerCmd) {
-        $r = Test-AppLockerPolicy -Path $testPath -User $env:USERNAME -ErrorAction Stop
-        $allowed = ($r.PolicyDecision -eq 'Allowed' -or $r.PolicyDecision -eq 'AllowedByDefault')
-        Write-Check 'AppLocker allows .ps1 from user profile' $allowed "PolicyDecision = $($r.PolicyDecision)"
-    } else {
-        Write-Check 'AppLocker allows .ps1 from user profile' $true 'Test-AppLockerPolicy not available — assuming no AppLocker'
+    $probeDir  = Join-Path $env:USERPROFILE '.vigil'
+    $testPath  = Join-Path $probeDir '.applocker-probe.ps1'
+    if (-not (Test-Path $probeDir)) { New-Item -ItemType Directory -Path $probeDir -Force | Out-Null }
+    Set-Content -Path $testPath -Value '# VIGIL preflight applocker probe' -Encoding UTF8
+    try {
+        $applockerCmd = Get-Command Test-AppLockerPolicy -ErrorAction SilentlyContinue
+        if ($applockerCmd) {
+            $r = Test-AppLockerPolicy -Path $testPath -User $env:USERNAME -ErrorAction Stop
+            $allowed = ($r.PolicyDecision -eq 'Allowed' -or $r.PolicyDecision -eq 'AllowedByDefault')
+            Write-Check 'AppLocker allows .ps1 from user profile' $allowed "PolicyDecision = $($r.PolicyDecision)"
+        } else {
+            Write-Check 'AppLocker allows .ps1 from user profile' $true 'Test-AppLockerPolicy not available — assuming no AppLocker'
+        }
+    } finally {
+        if (Test-Path $testPath) { Remove-Item $testPath -Force -ErrorAction SilentlyContinue }
     }
 } catch {
     Write-Check 'AppLocker allows .ps1 from user profile' $false $_.Exception.Message
@@ -364,12 +369,12 @@ try {
 # 24. Windows Defender real-time scan not blocking ~/.vigil
 #     Some EDRs quarantine scripts under %USERPROFILE% as untrusted.
 try {
-    $probe = Join-Path $env:USERPROFILE '.vigil\.defender-probe.ps1'
-    Set-Content -Path $probe -Value '# harmless probe' -Encoding UTF8
+    $probe = Join-Path $env:USERPROFILE (".vigil\.defender-probe-$([Guid]::NewGuid().ToString('N')).ps1")
+    Set-Content -Path $probe -Value '# VIGIL preflight defender probe' -Encoding UTF8
     Start-Sleep -Milliseconds 200
     $stillThere = Test-Path $probe
-    if ($stillThere) { Remove-Item $probe -Force }
     Write-Check 'Defender/EDR does not quarantine ~/.vigil scripts' $stillThere 'Probe file survived write+read cycle'
+    if ($stillThere) { Remove-Item $probe -Force -ErrorAction SilentlyContinue }
 } catch {
     Write-Check 'Defender/EDR does not quarantine ~/.vigil scripts' $false $_.Exception.Message
 }
@@ -906,5 +911,27 @@ $resultString = "VIGIL:v2:{0}:{1}:P{2}:F{3}:T{4}" -f $total, $hex, $passed, $fai
 Write-Host ""
 Write-Host "Paste this single line back for remote triage:" -ForegroundColor Cyan
 Write-Host $resultString -ForegroundColor White
+
+# Final cleanup sweep — scrub any stray probe artifacts in case an earlier
+# try/finally missed one. ~/.vigil directory itself is kept (it's VIGIL's
+# intentional home) but must be empty of probe files by now.
+try {
+    $vigilDir = Join-Path $env:USERPROFILE '.vigil'
+    if (Test-Path $vigilDir) {
+        Get-ChildItem -Path $vigilDir -Filter '.*-probe*' -Force -ErrorAction SilentlyContinue |
+            Remove-Item -Force -ErrorAction SilentlyContinue
+        Get-ChildItem -Path $vigilDir -Filter '.replace-*' -Force -ErrorAction SilentlyContinue |
+            Remove-Item -Force -ErrorAction SilentlyContinue
+        Get-ChildItem -Path $vigilDir -Filter '.nobom-probe*' -Force -ErrorAction SilentlyContinue |
+            Remove-Item -Force -ErrorAction SilentlyContinue
+        Get-ChildItem -Path $vigilDir -Filter '.applocker-probe*' -Force -ErrorAction SilentlyContinue |
+            Remove-Item -Force -ErrorAction SilentlyContinue
+        Get-ChildItem -Path $vigilDir -Filter '.write-probe' -Force -ErrorAction SilentlyContinue |
+            Remove-Item -Force -ErrorAction SilentlyContinue
+    }
+    # %TEMP% stray probes from check #53
+    Get-ChildItem -Path $env:TEMP -Filter '.vigil-temp-probe-*' -Force -ErrorAction SilentlyContinue |
+        Remove-Item -Force -ErrorAction SilentlyContinue
+} catch { }
 
 if ($passed -eq $total) { exit 0 } else { exit 1 }
