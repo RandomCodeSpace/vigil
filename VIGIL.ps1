@@ -12,7 +12,7 @@ param()
 
 # Build stamp — bumped on every commit. Visible in status bar + vigil.log.
 # Format: YYYY-MM-DD HH:MM (UTC)  buildN
-$script:VigilVersion = '2026-04-13 20:55 UTC  build18 settings-save'
+$script:VigilVersion = '2026-04-13 21:05 UTC  build19 sort-desc'
 
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName PresentationFramework
@@ -230,14 +230,16 @@ function Sort-VigilTasks([object[]]$tasks, [string]$mode = 'smart') {
             _created  = $created
         }
     }
-    $props = switch ($mode) {
-        'priority' { @('_priority','_due') }
-        'due'      { @('_due','_priority') }
-        'added'    { @('_created') }
-        default    { @('_overdue','_priority','_due') }  # smart
+    $annotatedArr = @($annotated)
+    if ($mode -eq 'added') {
+        $sorted = @($annotatedArr | Sort-Object -Property _created -Descending)
+    } elseif ($mode -eq 'priority') {
+        $sorted = @($annotatedArr | Sort-Object -Property _priority, _due)
+    } elseif ($mode -eq 'due') {
+        $sorted = @($annotatedArr | Sort-Object -Property _due, _priority)
+    } else {
+        $sorted = @($annotatedArr | Sort-Object -Property _overdue, _priority, _due)
     }
-    $sorted = @($annotated) | Sort-Object -Property $props
-    if ($mode -eq 'added') { [array]::Reverse($sorted) }  # newest first
     $out = @()
     foreach ($row in $sorted) { $out += $row._task }
     return $out
