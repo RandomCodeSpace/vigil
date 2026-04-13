@@ -334,11 +334,25 @@ try {
     if (-not (Test-Path $probeDir)) { New-Item -ItemType Directory -Path $probeDir -Force | Out-Null }
     Set-Content -Path $testPath -Value '# VIGIL preflight applocker probe' -Encoding UTF8
     try {
+        # AppLocker module may not be auto-loaded on all Windows editions
+        if (-not (Get-Module -Name AppLocker -ErrorAction SilentlyContinue)) {
+            Import-Module AppLocker -ErrorAction SilentlyContinue
+        }
         $applockerCmd = Get-Command Test-AppLockerPolicy -ErrorAction SilentlyContinue
         if ($applockerCmd) {
-            $r = Test-AppLockerPolicy -Path $testPath -User $env:USERNAME -ErrorAction Stop
+            # Use current user's SID — works for both domain and local accounts
+            # regardless of DOMAIN\user format. Bare USERNAME can fail on
+            # domain-joined boxes.
+            $sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+            $domUser = "$env:USERDOMAIN\$env:USERNAME"
+            try {
+                $r = Test-AppLockerPolicy -Path $testPath -User $sid -ErrorAction Stop
+            } catch {
+                # Fall back to DOMAIN\user string if SID resolution fails
+                $r = Test-AppLockerPolicy -Path $testPath -User $domUser -ErrorAction Stop
+            }
             $allowed = ($r.PolicyDecision -eq 'Allowed' -or $r.PolicyDecision -eq 'AllowedByDefault')
-            Write-Check 'AppLocker allows .ps1 from user profile' $allowed "PolicyDecision = $($r.PolicyDecision)"
+            Write-Check 'AppLocker allows .ps1 from user profile' $allowed "PolicyDecision = $($r.PolicyDecision) (user: $domUser)"
         } else {
             Write-Check 'AppLocker allows .ps1 from user profile' $true 'Test-AppLockerPolicy not available — assuming no AppLocker'
         }
