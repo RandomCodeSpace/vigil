@@ -51,18 +51,29 @@ $ver = $PSVersionTable.PSVersion
 $psOk = ($ver.Major -ge 5)
 Write-Check 'PowerShell 5.1+' $psOk "Detected $ver"
 
-# 3. Outlook COM
+# 3. Outlook COM — fully released in reverse order (no leaked RCWs)
+$ol = $ns = $cal = $inb = $tks = $calItems = $inbItems = $tksItems = $null
 try {
     $ol  = New-Object -ComObject Outlook.Application -ErrorAction Stop
     $ns  = $ol.GetNamespace('MAPI')
     $cal = $ns.GetDefaultFolder(9)   # olFolderCalendar
     $inb = $ns.GetDefaultFolder(6)   # olFolderInbox
     $tks = $ns.GetDefaultFolder(13)  # olFolderTasks
-    $detail = "Calendar=$($cal.Items.Count)  Inbox=$($inb.Items.Count)  Tasks=$($tks.Items.Count)"
+    $calItems = $cal.Items
+    $inbItems = $inb.Items
+    $tksItems = $tks.Items
+    $detail = "Calendar=$($calItems.Count)  Inbox=$($inbItems.Count)  Tasks=$($tksItems.Count)"
     Write-Check 'Outlook COM (MAPI + folders 9/6/13)' $true $detail
-    [System.Runtime.InteropServices.Marshal]::ReleaseComObject($ol) | Out-Null
 } catch {
     Write-Check 'Outlook COM (MAPI + folders 9/6/13)' $false $_.Exception.Message
+} finally {
+    foreach ($o in @($calItems, $inbItems, $tksItems, $cal, $inb, $tks, $ns, $ol)) {
+        if ($null -ne $o) {
+            try { [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($o) } catch {}
+        }
+    }
+    [GC]::Collect(); [GC]::WaitForPendingFinalizers()
+    [GC]::Collect(); [GC]::WaitForPendingFinalizers()
 }
 
 # 4. user32.dll P/Invoke (RegisterHotKey / UnregisterHotKey)
