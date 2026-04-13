@@ -324,10 +324,13 @@ try {
 
 # 22. AMSI / EDR does not flag inline C# Add-Type (used for P/Invoke).
 #     If aggressive EDR blocks Add-Type, VIGIL's hotkey + window activation die.
+#     Guard against "type already exists" on repeat runs in same PS session.
 try {
-    Add-Type -ErrorAction Stop -TypeDefinition @"
+    if (-not ([System.Management.Automation.PSTypeName]'VigilAmsiProbe').Type) {
+        Add-Type -ErrorAction Stop -TypeDefinition @"
 public class VigilAmsiProbe { public static int Answer() { return 42; } }
 "@
+    }
     $ok = ([VigilAmsiProbe]::Answer() -eq 42)
     Write-Check 'Add-Type inline C# not blocked by AMSI/EDR' $ok 'Required for hotkey + FindWindow P/Invoke'
 } catch {
@@ -570,7 +573,8 @@ try {
 
 # 43. System DPI scale factor (WPF widget pixel sizing)
 try {
-    Add-Type -TypeDefinition @"
+    if (-not ([System.Management.Automation.PSTypeName]'VigilDpi').Type) {
+        Add-Type -ErrorAction Stop -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
 public class VigilDpi {
@@ -578,7 +582,8 @@ public class VigilDpi {
     [DllImport("user32.dll")] public static extern int ReleaseDC(IntPtr hWnd, IntPtr hDC);
     [DllImport("gdi32.dll")]  public static extern int GetDeviceCaps(IntPtr hDC, int nIndex);
 }
-"@ -ErrorAction SilentlyContinue
+"@
+    }
     $dc = [VigilDpi]::GetDC([IntPtr]::Zero)
     $dpi = [VigilDpi]::GetDeviceCaps($dc, 88)  # LOGPIXELSX
     [void][VigilDpi]::ReleaseDC([IntPtr]::Zero, $dc)
