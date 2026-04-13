@@ -12,7 +12,7 @@ param()
 
 # Build stamp — bumped on every commit. Visible in status bar + vigil.log.
 # Format: YYYY-MM-DD HH:MM (UTC)  buildN
-$script:VigilVersion = '2026-04-13 21:05 UTC  build19 sort-desc'
+$script:VigilVersion = '2026-04-13 22:00 UTC  build20 raycast-density'
 
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName PresentationFramework
@@ -402,32 +402,45 @@ $xaml = @'
 
       <!-- Title bar -->
       <Border Grid.Row="0" x:Name="TitleBar" Background="{StaticResource SurfaceElev1}"
-              CornerRadius="16,16,0,0" Padding="18,0" Height="56">
+              CornerRadius="16,16,0,0" Padding="16,0" Height="48"
+              BorderBrush="{StaticResource Divider}" BorderThickness="0,0,0,1">
         <Grid>
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto"/>
             <ColumnDefinition Width="Auto"/>
             <ColumnDefinition Width="*"/>
             <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="Auto"/>
           </Grid.ColumnDefinitions>
 
-          <TextBlock Grid.Column="0" Text="VIGIL" FontSize="16" FontWeight="Bold"
-                     Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center"/>
+          <TextBlock Grid.Column="0" Text="VIGIL" FontSize="12" FontWeight="Bold"
+                     Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center"
+                     Margin="0,0,0,0">
+            <TextBlock.RenderTransform>
+              <TranslateTransform X="0" Y="0"/>
+            </TextBlock.RenderTransform>
+          </TextBlock>
 
           <Border Grid.Column="1" x:Name="CountBadge" Background="{StaticResource Accent}"
-                  CornerRadius="9" Padding="8,2" Margin="12,0,0,0"
-                  VerticalAlignment="Center" MinWidth="22">
-            <TextBlock x:Name="CountText" Text="0" FontSize="11" FontWeight="Bold"
-                       Foreground="#FFFFFF" HorizontalAlignment="Center"/>
+                  CornerRadius="8" Padding="6,1" Margin="8,0,0,0"
+                  VerticalAlignment="Center" MinWidth="18" Height="17">
+            <TextBlock x:Name="CountText" Text="0" FontSize="10" FontWeight="Bold"
+                       Foreground="#FFFFFF" HorizontalAlignment="Center" VerticalAlignment="Center"/>
           </Border>
 
-          <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
-            <Button x:Name="BtnSort" Content="Smart &#x25BE;" Style="{StaticResource GhostButton}"
-                    Margin="0,0,10,0" ToolTip="Sort order"/>
-            <Button x:Name="BtnCollapse" Content="&#xE921;" FontFamily="Segoe MDL2 Assets"
-                    Style="{StaticResource IconButton}" ToolTip="Minimize"/>
-            <Button x:Name="BtnClose"    Content="&#xE8BB;" FontFamily="Segoe MDL2 Assets"
-                    Style="{StaticResource CloseButton}" ToolTip="Close" Margin="2,0,0,0"/>
+          <Button Grid.Column="3" x:Name="BtnSort" Content="Smart"
+                  Style="{StaticResource GhostButton}" Margin="0,0,8,0"
+                  ToolTip="Change sort order"/>
+
+          <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center">
+            <Button x:Name="BtnCollapse" Style="{StaticResource IconButton}" ToolTip="Minimize">
+              <Path Data="M0,0 L8,0" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                    StrokeThickness="1.3" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+            </Button>
+            <Button x:Name="BtnClose" Style="{StaticResource CloseButton}" ToolTip="Close" Margin="2,0,0,0">
+              <Path Data="M0,0 L8,8 M8,0 L0,8" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                    StrokeThickness="1.3" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+            </Button>
           </StackPanel>
         </Grid>
       </Border>
@@ -735,11 +748,13 @@ $BtnCollapse.Add_Click({
         $TaskArea.Visibility   = 'Visible'
         $AddArea.Visibility    = 'Visible'
         $StatusArea.Visibility = 'Visible'
+        $BtnSort.Visibility    = 'Visible'
         $script:IsCollapsed = $false
     } else {
         $TaskArea.Visibility   = 'Collapsed'
         $AddArea.Visibility    = 'Collapsed'
         $StatusArea.Visibility = 'Collapsed'
+        $BtnSort.Visibility    = 'Collapsed'
         $script:IsCollapsed = $true
     }
 })
