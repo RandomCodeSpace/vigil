@@ -12,7 +12,7 @@ param()
 
 # Build stamp — bumped on every commit. Visible in status bar + vigil.log.
 # Format: YYYY-MM-DD HH:MM (UTC)  buildN
-$script:VigilVersion = '2026-04-13 20:40 UTC  build17 xaml-fix'
+$script:VigilVersion = '2026-04-13 20:55 UTC  build18 settings-save'
 
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName PresentationFramework
@@ -184,15 +184,19 @@ function Load-VigilSettings {
 }
 
 function Save-VigilSettings($settings) {
-    $json = ConvertTo-Json -InputObject $settings -Depth 4
-    $utf8 = New-Object System.Text.UTF8Encoding($false)
-    $bytes = $utf8.GetBytes($json)
-    $tmp = $script:SettingsPath + '.tmp'
-    [System.IO.File]::WriteAllBytes($tmp, $bytes)
-    if (Test-Path $script:SettingsPath) {
-        [System.IO.File]::Replace($tmp, $script:SettingsPath, $null)
-    } else {
+    try {
+        $json = ConvertTo-Json -InputObject $settings -Depth 4
+        $utf8 = New-Object System.Text.UTF8Encoding($false)
+        $bytes = $utf8.GetBytes($json)
+        $tmp = $script:SettingsPath + '.tmp'
+        [System.IO.File]::WriteAllBytes($tmp, $bytes)
+        if (Test-Path $script:SettingsPath) {
+            [System.IO.File]::Delete($script:SettingsPath)
+        }
         [System.IO.File]::Move($tmp, $script:SettingsPath)
+    } catch {
+        $m = 'Save-VigilSettings FAILED: {0}' -f $_.Exception.Message
+        Write-VigilLog $m
     }
 }
 
