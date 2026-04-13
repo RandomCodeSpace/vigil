@@ -13,7 +13,7 @@ param(
 
 # Build stamp - bumped on every commit. Visible in status bar + vigil.log.
 # Format: YYYY-MM-DD HH:MM (UTC)  buildN
-$script:VigilVersion = '2026-04-14 03:10 UTC  build48 dynamic-brushes-wider-split-count'
+$script:VigilVersion = '2026-04-14 03:10 UTC  build49 native-caption-buttons'
 
 $ErrorActionPreference = 'Stop'
 
@@ -821,7 +821,7 @@ $xaml = @'
 
       <!-- Title bar -->
       <Border Grid.Row="0" x:Name="TitleBar" Background="Transparent"
-              CornerRadius="0" Padding="12,0" Height="38"
+              CornerRadius="0" Padding="12,0,0,0" Height="32"
               BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}" BorderThickness="0,0,0,1">
         <Grid>
           <Grid.ColumnDefinitions>
@@ -884,13 +884,15 @@ $xaml = @'
                     ToolTip="Sort / Filter"/>
           </StackPanel>
 
-          <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center">
-            <Button x:Name="BtnCollapse" Content="_" ToolTip="Minimize"
-                    FontFamily="Consolas" FontSize="14" FontWeight="Bold"
-                    Padding="8,0" MinWidth="28" MinHeight="24"/>
-            <Button x:Name="BtnClose" Content="X" ToolTip="Close" Margin="2,0,0,0"
-                    FontFamily="Consolas" FontSize="12" FontWeight="Bold"
-                    Padding="8,0" MinWidth="28" MinHeight="24"/>
+          <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Stretch">
+            <Button x:Name="BtnCollapse" Content="&#xE921;" ToolTip="Minimize"
+                    FontFamily="Segoe MDL2 Assets" FontSize="10"
+                    Width="46" Padding="0" Background="Transparent" BorderThickness="0"
+                    Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
+            <Button x:Name="BtnClose" Content="&#xE8BB;" ToolTip="Close"
+                    FontFamily="Segoe MDL2 Assets" FontSize="10"
+                    Width="46" Padding="0" Background="Transparent" BorderThickness="0"
+                    Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
           </StackPanel>
         </Grid>
       </Border>
@@ -1475,6 +1477,24 @@ function Show-VigilEditPrompt {
 
 # --- Event wiring ----------------------------------------------------------
 $TitleBar.Add_MouseLeftButtonDown({ $window.DragMove() })
+
+# Native-style caption button hover: subtle on minimize, red on close
+$captionHoverBrush = New-Object System.Windows.Media.SolidColorBrush(
+    [System.Windows.Media.Color]::FromArgb(40, 128, 128, 128))
+$closeHoverBrush = New-Object System.Windows.Media.SolidColorBrush(
+    [System.Windows.Media.Color]::FromRgb(232, 17, 35))
+$closeHoverFg = [System.Windows.Media.Brushes]::White
+
+$BtnCollapse.Add_MouseEnter({ $BtnCollapse.Background = $captionHoverBrush })
+$BtnCollapse.Add_MouseLeave({ $BtnCollapse.ClearValue([System.Windows.Controls.Control]::BackgroundProperty); $BtnCollapse.Background = [System.Windows.Media.Brushes]::Transparent })
+$BtnClose.Add_MouseEnter({
+    $BtnClose.Background = $closeHoverBrush
+    $BtnClose.Foreground = $closeHoverFg
+})
+$BtnClose.Add_MouseLeave({
+    $BtnClose.Background = [System.Windows.Media.Brushes]::Transparent
+    $BtnClose.ClearValue([System.Windows.Controls.Control]::ForegroundProperty)
+})
 
 $BtnClose.Add_Click({
     $Global:VigilSettings.posX = [int]$window.Left
