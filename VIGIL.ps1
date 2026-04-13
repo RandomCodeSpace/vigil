@@ -10,6 +10,10 @@
 [CmdletBinding()]
 param()
 
+# Build stamp — bumped on every commit. Visible in status bar + vigil.log.
+# Format: YYYY-MM-DD HH:MM (UTC)  buildN
+$script:VigilVersion = '2026-04-13 18:05 UTC  build14'
+
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName PresentationCore
@@ -552,7 +556,7 @@ function Refresh-Render {
     $CountText.Text = "$active"
     $CountBadge.Visibility = if ($active -gt 0) { 'Visible' } else { 'Collapsed' }
     $StatusRight.Text = "$active active"
-    $StatusLeft.Text  = (Get-Date -Format 'h:mm tt')
+    $StatusLeft.Text  = $script:VigilVersion
 }
 
 function Toggle-Done([string]$id, [bool]$done) {
@@ -621,7 +625,7 @@ $window.Add_Closing({
 })
 
 # --- Go --------------------------------------------------------------------
-$startMsg = 'VIGIL started. {0} tasks loaded.' -f $script:Tasks.Count
+$startMsg = 'VIGIL started. version={0}  tasks={1}' -f $script:VigilVersion, $script:Tasks.Count
 Write-VigilLog $startMsg
 Refresh-Render
 [void]$window.ShowDialog()
