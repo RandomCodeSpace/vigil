@@ -13,7 +13,7 @@ param(
 
 # Build stamp - bumped on every commit. Visible in status bar + vigil.log.
 # Format: YYYY-MM-DD HH:MM (UTC)  buildN
-$script:VigilVersion = '2026-04-13 15:00 UTC  build59 badge-filters'
+$script:VigilVersion = '2026-04-13 15:15 UTC  build60 pinned-badges'
 
 $ErrorActionPreference = 'Stop'
 
@@ -1280,9 +1280,9 @@ function Refresh-Render {
     $CountTaskText.Text = [string]$taskCount
     $CountCritText.Text = [string]$critCount
     $CountHighText.Text = [string]$highCount
-    $CountCalBadge.Visibility  = if ($calCount  -gt 0) { 'Visible' } else { 'Collapsed' }
-    $CountTaskBadge.Visibility = if ($taskCount -gt 0) { 'Visible' } else { 'Collapsed' }
-    $CountCritBadge.Visibility = if ($critCount -gt 0) { 'Visible' } else { 'Collapsed' }
+    $CountCalBadge.Visibility  = 'Visible'
+    $CountTaskBadge.Visibility = 'Visible'
+    $CountCritBadge.Visibility = 'Visible'
     $CountHighBadge.Visibility = if ($highCount -gt 0) { 'Visible' } else { 'Collapsed' }
     $af = [string]$Global:VigilSettings.activeFilter
     $dim = 0.4
