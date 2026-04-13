@@ -1,18 +1,18 @@
-﻿# VIGIL — Personal Task Command Center
+﻿# VIGIL - Personal Task Command Center
 # Phase 1: widget + data layer + Apple-styled UI (reduce-motion variant)
 #
 # Environment requirements verified by preflight.ps1 (schema v2, 58/60):
-#   - #31 BitLocker OFF  → tasks.json is DPAPI-wrapped (CurrentUser scope)
-#   - #45 MinAnimate OFF → all WPF Storyboards removed (static UI)
+#   - #31 BitLocker OFF  -> tasks.json is DPAPI-wrapped (CurrentUser scope)
+#   - #45 MinAnimate OFF -> all WPF Storyboards removed (static UI)
 #
 # Usage: powershell -ExecutionPolicy Bypass -WindowStyle Hidden -File .\VIGIL.ps1
 
 [CmdletBinding()]
 param()
 
-# Build stamp — bumped on every commit. Visible in status bar + vigil.log.
+# Build stamp - bumped on every commit. Visible in status bar + vigil.log.
 # Format: YYYY-MM-DD HH:MM (UTC)  buildN
-$script:VigilVersion = '2026-04-13 22:00 UTC  build20 raycast-density'
+$script:VigilVersion = '2026-04-13 22:30 UTC  build21 ascii-clean'
 
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName PresentationFramework
@@ -176,7 +176,7 @@ function Load-VigilSettings {
             Write-VigilLog $smsg
         }
     }
-    # Merge loaded over defaults — guarantees every key exists on the returned object
+    # Merge loaded over defaults - guarantees every key exists on the returned object
     $merged = @{}
     foreach ($k in $default.Keys) { $merged[$k] = $default[$k] }
     foreach ($k in $loaded.Keys)  { $merged[$k] = $loaded[$k]  }
@@ -275,7 +275,7 @@ $xaml = @'
         SnapsToDevicePixels="True"
         FontFamily="Segoe UI">
   <Window.Resources>
-    <!-- Custom dark theme — designed from scratch, no external design system -->
+    <!-- Custom dark theme - designed from scratch, no external design system -->
     <SolidColorBrush x:Key="SurfaceBase"    Color="#0B0E14"/>
     <SolidColorBrush x:Key="SurfaceElev1"   Color="#141922"/>
     <SolidColorBrush x:Key="SurfaceElev2"   Color="#1C2230"/>
@@ -611,7 +611,7 @@ function Build-TaskCard($task) {
     $grid.Children.Add($stack) | Out-Null
     $border.Child = $grid
 
-    # Context menu — priority, due date, delete
+    # Context menu - priority, due date, delete
     $menu = New-Object System.Windows.Controls.ContextMenu
 
     $prioRoot = New-Object System.Windows.Controls.MenuItem
@@ -662,7 +662,7 @@ function Build-TaskCard($task) {
     $menu.Items.Add($delItem) | Out-Null
     $border.ContextMenu = $menu
 
-    # Check toggle — static, no fade
+    # Check toggle - static, no fade
     $check.Add_Checked({
         param($s, $e)
         $card = $s.Parent.Parent
