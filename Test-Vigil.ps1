@@ -330,6 +330,27 @@ Assert-True ($md.Contains('- [x] done-task'))   'done task uses [x] checkbox'
 Assert-True ($md.Contains('- [ ] active-high')) 'active task uses [ ] checkbox'
 
 # --------------------------------------------------------------------------
+Section 'Search-VigilTasks - text search'
+# --------------------------------------------------------------------------
+
+$searchFix = @(
+    (New-VigilTask -Title 'Review pull request for billing' -Priority 'high')
+    (New-VigilTask -Title 'Send invoice to client' -Priority 'normal')
+    (New-VigilTask -Title 'Fix CSS bug' -Priority 'low')
+)
+# notes match
+$noted = New-VigilTask -Title 'Standup notes' -Priority 'normal'
+$noted.notes = 'discuss billing system migration'
+$searchFix += $noted
+
+Assert-Count 4 (Search-VigilTasks -tasks $searchFix -query '')      'empty query returns all'
+Assert-Count 2 (Search-VigilTasks -tasks $searchFix -query 'bill')  'matches title + notes containing bill'
+Assert-Count 1 (Search-VigilTasks -tasks $searchFix -query 'CSS')   'case-insensitive title match'
+Assert-Count 1 (Search-VigilTasks -tasks $searchFix -query 'css')   'case-insensitive lowercase'
+Assert-Count 0 (Search-VigilTasks -tasks $searchFix -query 'xyz')   'no match returns empty'
+Assert-Count 4 (Search-VigilTasks -tasks $searchFix -query '   ')   'whitespace-only query returns all'
+
+# --------------------------------------------------------------------------
 Section 'Edge cases - empty inputs'
 # --------------------------------------------------------------------------
 

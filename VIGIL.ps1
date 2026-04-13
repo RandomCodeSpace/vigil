@@ -13,7 +13,7 @@ param(
 
 # Build stamp - bumped on every commit. Visible in status bar + vigil.log.
 # Format: YYYY-MM-DD HH:MM (UTC)  buildN
-$script:VigilVersion = '2026-04-14 03:10 UTC  build45 full-fluent'
+$script:VigilVersion = '2026-04-14 03:10 UTC  build46 search-keynav-welcome'
 
 $ErrorActionPreference = 'Stop'
 
@@ -263,7 +263,7 @@ function Load-VigilSettings {
         posX = 1200; posY = 400; collapsed = $false; showCompleted = $false
         outlookSync = $false; syncIntervalMin = 15; opacity = 1.0
         lastSyncTime = ''; activeFilter = 'all'; autoStartInstalled = $false
-        sortMode = 'smart'
+        sortMode = 'smart'; searchText = ''; welcomeShown = $false
     }
     $loaded = @{}
     if (Test-Path $script:SettingsPath) {
@@ -709,6 +709,23 @@ function Filter-VigilTasks([object[]]$tasks, [string]$mode) {
     }
 }
 
+function Search-VigilTasks([object[]]$tasks, [string]$query) {
+    if ([string]::IsNullOrWhiteSpace($query)) { return ,$tasks }
+    $needle = $query.Trim().ToLower()
+    $out = @()
+    foreach ($t in $tasks) {
+        if ($null -eq $t -or -not $t.title) { continue }
+        if ($t.title.ToLower().Contains($needle)) {
+            $out += $t; continue
+        }
+        if ($t.notes -and $t.notes.ToString().ToLower().Contains($needle)) {
+            $out += $t
+        }
+    }
+    # comma operator wraps the array so PS does not unwrap it to $null when empty
+    return ,$out
+}
+
 # --- Sort + priority helpers -----------------------------------------------
 $script:PriorityRank = @{ critical = 0; high = 1; normal = 2; low = 3 }
 
@@ -879,16 +896,22 @@ $xaml = @'
 
       <!-- Task list area -->
       <Border Grid.Row="1" x:Name="TaskArea" Background="Transparent">
-        <ScrollViewer MaxHeight="360" VerticalScrollBarVisibility="Auto"
-                      HorizontalScrollBarVisibility="Disabled" Padding="0,2,0,0">
-          <ItemsControl x:Name="TaskList">
-            <ItemsControl.ItemsPanel>
-              <ItemsPanelTemplate>
-                <StackPanel/>
-              </ItemsPanelTemplate>
-            </ItemsControl.ItemsPanel>
-          </ItemsControl>
-        </ScrollViewer>
+        <DockPanel>
+          <TextBox x:Name="SearchInput" DockPanel.Dock="Top"
+                   Margin="12,8,12,4" FontSize="12"
+                   VerticalContentAlignment="Center"
+                   ToolTip="Filter tasks by title or notes (Ctrl+F)"/>
+          <ScrollViewer MaxHeight="340" VerticalScrollBarVisibility="Auto"
+                        HorizontalScrollBarVisibility="Disabled" Padding="0,2,0,0">
+            <ItemsControl x:Name="TaskList">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <StackPanel/>
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+            </ItemsControl>
+          </ScrollViewer>
+        </DockPanel>
       </Border>
 
       <!-- Inline add: flat input with bottom hairline, no box -->
@@ -939,6 +962,7 @@ $window = [Windows.Markup.XamlReader]::Load($reader)
 $OuterFrame  = $window.FindName('OuterFrame')
 $FluentLabel = $window.FindName('FluentLabel')
 $TitleBar    = $window.FindName('TitleBar')
+$SearchInput = $window.FindName('SearchInput')
 $BtnCollapse = $window.FindName('BtnCollapse')
 $BtnClose    = $window.FindName('BtnClose')
 $BtnSort     = $window.FindName('BtnSort')
@@ -993,11 +1017,24 @@ function Build-TaskCard($task) {
     $border = New-Object System.Windows.Controls.Border
     $border.Margin = New-Object System.Windows.Thickness(0,0,0,0)
     $border.Padding = New-Object System.Windows.Thickness(12,10,12,10)
-    $border.Background = [System.Windows.Media.Brushes]::Transparent
+    $isSelected = ($Global:VigilSelectedId -and $task.id -eq $Global:VigilSelectedId)
+    if ($isSelected) {
+        $selBrush = Get-VigilBrush 'SubtleFillColorSecondaryBrush' ([System.Windows.Media.Color]::FromArgb(40,255,255,255))
+        $border.Background = $selBrush
+    } else {
+        $border.Background = [System.Windows.Media.Brushes]::Transparent
+    }
     $dividerBrush = Get-VigilBrush 'DividerStrokeColorDefaultBrush' ([System.Windows.Media.Color]::FromRgb(31,31,31))
     $border.BorderBrush = $dividerBrush
     $border.BorderThickness = New-Object System.Windows.Thickness(0,0,0,1)
     $border.Cursor = [System.Windows.Input.Cursors]::Hand
+    $border.Tag = $task.id
+    # Click on a card to select it
+    $border.Add_MouseLeftButtonDown({
+        param($s, $e)
+        $Global:VigilSelectedId = [string]$s.Tag
+        Refresh-Render
+    })
 
     $isOverdue = $false
     if ($task.dueDate) {
@@ -1173,6 +1210,9 @@ function Refresh-Render {
     $filterMode = 'all'
     if ($Global:VigilSettings.activeFilter) { $filterMode = [string]$Global:VigilSettings.activeFilter }
     $tasks = Filter-VigilTasks -tasks $tasks -mode $filterMode
+    if ($Global:VigilSettings.searchText) {
+        $tasks = @(Search-VigilTasks -tasks $tasks -query $Global:VigilSettings.searchText)
+    }
 
     $sortMode = 'smart'
     if ($Global:VigilSettings.sortMode) { $sortMode = [string]$Global:VigilSettings.sortMode }
@@ -1257,6 +1297,87 @@ $editPromptXaml = @'
   </StackPanel>
 </Window>
 '@
+
+$welcomeXaml = @'
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Welcome to VIGIL"
+        Width="480" SizeToContent="Height"
+        WindowStyle="None" ResizeMode="NoResize"
+        AllowsTransparency="False" Background="{x:Null}" {{THEMEMODE}}
+        Topmost="True" ShowInTaskbar="False"
+        TextOptions.TextFormattingMode="Ideal"
+        UseLayoutRounding="True"
+        FontFamily="Segoe UI"
+        WindowStartupLocation="CenterScreen">
+  <StackPanel Margin="28,24,28,20">
+    <TextBlock Text="VIGIL" FontFamily="Consolas" FontSize="14" FontWeight="Bold" Opacity="0.7"/>
+    <TextBlock Text="Always watching. Always ready." FontSize="22" FontWeight="SemiBold" Margin="0,4,0,16"/>
+    <TextBlock TextWrapping="Wrap" Margin="0,0,0,18" Opacity="0.85"
+               Text="A keyboard-first task tracker that lives on your screen. Here is what you need to know:"/>
+    <Grid Margin="0,0,0,8">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="140"/>
+        <ColumnDefinition Width="*"/>
+      </Grid.ColumnDefinitions>
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+      </Grid.RowDefinitions>
+      <TextBlock Grid.Row="0" Grid.Column="0" Text="Ctrl+Win+A" FontFamily="Consolas" FontWeight="SemiBold" Margin="0,4"/>
+      <TextBlock Grid.Row="0" Grid.Column="1" Text="Capture a task from any app" Margin="0,4"/>
+      <TextBlock Grid.Row="1" Grid.Column="0" Text="Ctrl+F" FontFamily="Consolas" FontWeight="SemiBold" Margin="0,4"/>
+      <TextBlock Grid.Row="1" Grid.Column="1" Text="Filter the list by text" Margin="0,4"/>
+      <TextBlock Grid.Row="2" Grid.Column="0" Text="Up / Down" FontFamily="Consolas" FontWeight="SemiBold" Margin="0,4"/>
+      <TextBlock Grid.Row="2" Grid.Column="1" Text="Move the selection" Margin="0,4"/>
+      <TextBlock Grid.Row="3" Grid.Column="0" Text="Space" FontFamily="Consolas" FontWeight="SemiBold" Margin="0,4"/>
+      <TextBlock Grid.Row="3" Grid.Column="1" Text="Toggle done on selected task" Margin="0,4"/>
+      <TextBlock Grid.Row="4" Grid.Column="0" Text="Enter" FontFamily="Consolas" FontWeight="SemiBold" Margin="0,4"/>
+      <TextBlock Grid.Row="4" Grid.Column="1" Text="Edit selected task title" Margin="0,4"/>
+      <TextBlock Grid.Row="5" Grid.Column="0" Text="Delete" FontFamily="Consolas" FontWeight="SemiBold" Margin="0,4"/>
+      <TextBlock Grid.Row="5" Grid.Column="1" Text="Remove the selected task" Margin="0,4"/>
+    </Grid>
+    <TextBlock TextWrapping="Wrap" Margin="0,16,0,16" Opacity="0.7" FontSize="12"
+               Text="VIGIL syncs Outlook calendar, flagged emails, and tasks every 15 minutes. The widget lives in your system tray (right-click for menu)."/>
+    <Button x:Name="BtnWelcomeOk" Content="Got it" HorizontalAlignment="Right" MinWidth="100"/>
+  </StackPanel>
+</Window>
+'@
+
+function Show-VigilWelcome {
+    if (-not $script:IsWindowsHost) { return }
+    if ($Global:VigilSettings.welcomeShown) { return }
+    try {
+        $wAttr = ''
+        if ($script:HasFluent) { $wAttr = 'ThemeMode="Dark"' }
+        $wReady = $welcomeXaml.Replace('{{THEMEMODE}}', $wAttr)
+        [xml]$wx = $wReady
+        $wreader = New-Object System.Xml.XmlNodeReader $wx
+        $wwin = [Windows.Markup.XamlReader]::Load($wreader)
+        $btnOk = $wwin.FindName('BtnWelcomeOk')
+        $btnOk.Add_Click({
+            $Global:VigilSettings.welcomeShown = $true
+            Save-VigilSettings $Global:VigilSettings
+            $wwin.Close()
+        }.GetNewClosure())
+        $wwin.Add_KeyDown({
+            param($s, $e)
+            if ($e.Key -eq 'Escape' -or $e.Key -eq 'Return') {
+                $Global:VigilSettings.welcomeShown = $true
+                Save-VigilSettings $Global:VigilSettings
+                $wwin.Close()
+            }
+        }.GetNewClosure())
+        [void]$wwin.ShowDialog()
+    } catch {
+        $em = 'Show-VigilWelcome failed: ' + $_.Exception.Message
+        Write-VigilLog $em
+    }
+}
 
 function Show-VigilEditPrompt {
     param([string]$Id, [string]$Field)
@@ -1440,6 +1561,98 @@ $BtnSort.Add_Click({
 })
 
 # Sync button wiring
+# Keyboard nav over task rows: Up/Down move selection, Space toggle done,
+# Delete remove, Enter open edit-title popup.
+$Global:VigilSelectedId = $null
+function Get-VigilVisibleTasks {
+    $tasks = $Global:VigilTasks
+    if (-not $Global:VigilSettings.showCompleted) {
+        $tasks = @($tasks | Where-Object { -not $_.done })
+    }
+    $tasks = Filter-VigilTasks -tasks $tasks -mode ([string]$Global:VigilSettings.activeFilter)
+    if ($Global:VigilSettings.searchText) {
+        $tasks = @(Search-VigilTasks -tasks $tasks -query $Global:VigilSettings.searchText)
+    }
+    return @(Sort-VigilTasks -tasks $tasks -mode ([string]$Global:VigilSettings.sortMode))
+}
+function Move-VigilSelection([int]$delta) {
+    $vis = @(Get-VigilVisibleTasks)
+    if ($vis.Count -eq 0) { return }
+    $idx = -1
+    if ($Global:VigilSelectedId) {
+        for ($i = 0; $i -lt $vis.Count; $i++) {
+            if ($vis[$i].id -eq $Global:VigilSelectedId) { $idx = $i; break }
+        }
+    }
+    $idx = $idx + $delta
+    if ($idx -lt 0) { $idx = 0 }
+    if ($idx -ge $vis.Count) { $idx = $vis.Count - 1 }
+    $Global:VigilSelectedId = $vis[$idx].id
+    Refresh-Render
+}
+$window.Add_PreviewKeyDown({
+    param($s, $e)
+    # Skip if focus is in a textbox so typing in search/add doesn't trigger nav
+    $focused = [System.Windows.Input.Keyboard]::FocusedElement
+    if ($focused -is [System.Windows.Controls.TextBox]) {
+        if ($e.Key -ne 'Escape') { return }
+    }
+    switch ($e.Key) {
+        'Up'     { Move-VigilSelection -1; $e.Handled = $true }
+        'Down'   { Move-VigilSelection 1;  $e.Handled = $true }
+        'Space'  {
+            if ($Global:VigilSelectedId) {
+                $cur = Get-VigilTaskById $Global:VigilSelectedId
+                if ($cur) {
+                    [void](Update-VigilTask -Id $cur.id -Done (-not $cur.done))
+                    Refresh-Render
+                    $e.Handled = $true
+                }
+            }
+        }
+        'Delete' {
+            if ($Global:VigilSelectedId) {
+                [void](Remove-VigilTask $Global:VigilSelectedId)
+                $Global:VigilSelectedId = $null
+                Refresh-Render
+                $e.Handled = $true
+            }
+        }
+        'Enter'  {
+            if ($Global:VigilSelectedId) {
+                Show-VigilEditPrompt -Id $Global:VigilSelectedId -Field 'title'
+                $e.Handled = $true
+            }
+        }
+    }
+})
+
+# Search filter wiring
+if ($Global:VigilSettings.searchText) {
+    $SearchInput.Text = $Global:VigilSettings.searchText
+}
+$SearchInput.Add_TextChanged({
+    $Global:VigilSettings.searchText = $SearchInput.Text
+    Refresh-Render
+})
+$SearchInput.Add_KeyDown({
+    param($s, $e)
+    if ($e.Key -eq 'Escape') {
+        $SearchInput.Text = ''
+        $e.Handled = $true
+    }
+})
+# Ctrl+F focuses the search box from anywhere in the window
+$window.Add_PreviewKeyDown({
+    param($s, $e)
+    $ctrl = ([System.Windows.Input.Keyboard]::Modifiers -band [System.Windows.Input.ModifierKeys]::Control)
+    if ($ctrl -and $e.Key -eq 'F') {
+        $SearchInput.Focus() | Out-Null
+        $SearchInput.SelectAll()
+        $e.Handled = $true
+    }
+})
+
 $BtnSync.Add_Click({
     $BtnSync.Content = 'Syncing...'
     $BtnSync.IsEnabled = $false
@@ -1845,6 +2058,9 @@ $window.Add_Loaded({ Show-VigilOverdueBalloon })
 
 # --- Phase 4: auto-start shortcut (first-run silent install) ---
 Install-VigilStartupShortcut
+
+# --- Phase 5: first-run welcome dialog (shows once) ---
+$window.Add_ContentRendered({ Show-VigilWelcome }.GetNewClosure())
 
 # --- Phase 3: 15-min Outlook auto-sync timer ---
 $syncTimer = New-Object System.Windows.Threading.DispatcherTimer
