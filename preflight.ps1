@@ -493,6 +493,227 @@ try {
     Write-Check 'Running as non-admin (as intended)' $false $_.Exception.Message
 }
 
+# --- Extended environment inspection (v2 additions, checks 36-55) ---
+
+# 36. Windows version + build — gates Mica (22000+) and PerMonitorV2 DPI
+try {
+    $os = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
+    $build = [int]($os.BuildNumber)
+    $caption = $os.Caption
+    $isWin11 = ($build -ge 22000)
+    $detail = "$caption build $build" + $(if ($isWin11) { ' (Win11 — Mica OK)' } else { ' (Win10 — flat glass fallback)' })
+    Write-Check 'Windows version + build' $true $detail
+} catch {
+    Write-Check 'Windows version + build' $false $_.Exception.Message
+}
+
+# 37. Outlook version + bitness (x64 vs x86 affects COM marshalling choices)
+try {
+    $ol = New-Object -ComObject Outlook.Application -ErrorAction Stop
+    $ver = $ol.Version
+    $exe = $ol.Path
+    [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($ol)
+    [GC]::Collect(); [GC]::WaitForPendingFinalizers()
+    Write-Check 'Outlook version + install path' $true "v$ver at $exe"
+} catch {
+    Write-Check 'Outlook version + install path' $false $_.Exception.Message
+}
+
+# 38. Outlook currently running (affects first-sync latency strategy)
+try {
+    $running = $null -ne (Get-Process -Name OUTLOOK -ErrorAction SilentlyContinue)
+    $detail = if ($running) { 'Running — GetActiveObject path' } else { 'Not running — startup sync will launch Outlook' }
+    Write-Check 'Outlook process currently running' $true $detail
+} catch {
+    Write-Check 'Outlook process currently running' $true $_.Exception.Message
+}
+
+# 39. Windows theme (light/dark) — auto-theme for Apple reskin
+try {
+    $k = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize'
+    $appsLight = (Get-ItemProperty -Path $k -Name AppsUseLightTheme -ErrorAction Stop).AppsUseLightTheme
+    $theme = if ($appsLight -eq 0) { 'dark' } else { 'light' }
+    Write-Check 'Windows app theme (light/dark)' $true "Theme = $theme"
+} catch {
+    Write-Check 'Windows app theme (light/dark)' $true 'Key absent — defaulting to dark'
+}
+
+# 40. Transparency effects enabled — if OFF, skip glass/blur entirely
+try {
+    $k = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize'
+    $tOn = (Get-ItemProperty -Path $k -Name EnableTransparency -ErrorAction Stop).EnableTransparency
+    $ok = ($tOn -eq 1)
+    Write-Check 'Transparency effects enabled' $ok "EnableTransparency = $tOn"
+} catch {
+    Write-Check 'Transparency effects enabled' $true 'Key absent — assume on'
+}
+
+# 41. System accent color (informational — VIGIL ignores, but good triage)
+try {
+    $k = 'HKCU:\Software\Microsoft\Windows\DWM'
+    $accent = (Get-ItemProperty -Path $k -Name ColorizationColor -ErrorAction Stop).ColorizationColor
+    $hex = ('#{0:X8}' -f $accent)
+    Write-Check 'System accent color' $true "DWM ColorizationColor = $hex"
+} catch {
+    Write-Check 'System accent color' $true 'Not readable — default accent'
+}
+
+# 42. Display count + primary resolution (multi-monitor quick-add popup)
+try {
+    Add-Type -AssemblyName System.Windows.Forms -ErrorAction Stop
+    $screens = [System.Windows.Forms.Screen]::AllScreens
+    $primary = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+    Write-Check 'Display layout' $true "$($screens.Count) display(s), primary $($primary.Width)x$($primary.Height)"
+} catch {
+    Write-Check 'Display layout' $false $_.Exception.Message
+}
+
+# 43. System DPI scale factor (WPF widget pixel sizing)
+try {
+    Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public class VigilDpi {
+    [DllImport("user32.dll")] public static extern IntPtr GetDC(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern int ReleaseDC(IntPtr hWnd, IntPtr hDC);
+    [DllImport("gdi32.dll")]  public static extern int GetDeviceCaps(IntPtr hDC, int nIndex);
+}
+"@ -ErrorAction SilentlyContinue
+    $dc = [VigilDpi]::GetDC([IntPtr]::Zero)
+    $dpi = [VigilDpi]::GetDeviceCaps($dc, 88)  # LOGPIXELSX
+    [void][VigilDpi]::ReleaseDC([IntPtr]::Zero, $dc)
+    $scale = [math]::Round($dpi / 96.0, 2)
+    Write-Check 'System DPI + scale factor' $true "$dpi DPI (${scale}x scale)"
+} catch {
+    Write-Check 'System DPI + scale factor' $false $_.Exception.Message
+}
+
+# 44. High contrast mode (accessibility — disables translucency)
+try {
+    Add-Type -AssemblyName System.Windows.Forms -ErrorAction SilentlyContinue
+    $hc = [System.Windows.Forms.SystemInformation]::HighContrast
+    Write-Check 'High contrast mode OFF' (-not $hc) "HighContrast = $hc"
+} catch {
+    Write-Check 'High contrast mode OFF' $true $_.Exception.Message
+}
+
+# 45. Reduced motion / client animations enabled (accessibility)
+try {
+    $k = 'HKCU:\Control Panel\Desktop\WindowMetrics'
+    $anim = (Get-ItemProperty -Path $k -Name MinAnimate -ErrorAction Stop).MinAnimate
+    $on = ($anim -eq '1')
+    Write-Check 'Window animations enabled' $on "MinAnimate = $anim"
+} catch {
+    Write-Check 'Window animations enabled' $true 'Key absent — assume on'
+}
+
+# 46. WPF render tier (0=software, 1=partial hw, 2=full hw)
+try {
+    Add-Type -AssemblyName PresentationCore -ErrorAction Stop
+    $tier = [System.Windows.Media.RenderCapability]::Tier -shr 16
+    $label = @('software','partial','full')[[math]::Min(2, $tier)]
+    Write-Check 'WPF render tier' $true "Tier $tier ($label)"
+} catch {
+    Write-Check 'WPF render tier' $false $_.Exception.Message
+}
+
+# 47. RDP / Citrix / virtual session detection (widget strategy differs)
+try {
+    $sessionName = $env:SESSIONNAME
+    $isRemote = ($sessionName -like 'RDP-*') -or ($sessionName -like 'ICA-*')
+    $detail = "SESSIONNAME = $sessionName" + $(if ($isRemote) { ' (remote session)' } else { ' (console)' })
+    Write-Check 'Console (non-remote) session' (-not $isRemote) $detail
+} catch {
+    Write-Check 'Console (non-remote) session' $true $_.Exception.Message
+}
+
+# 48. Power state (battery vs plugged in — informational)
+try {
+    $batt = Get-CimInstance Win32_Battery -ErrorAction SilentlyContinue
+    if ($null -eq $batt) {
+        Write-Check 'Power state' $true 'Desktop (no battery)'
+    } else {
+        $pct = $batt.EstimatedChargeRemaining
+        $onAc = ($batt.BatteryStatus -eq 2)
+        $state = if ($onAc) { 'on AC' } else { 'on battery' }
+        Write-Check 'Power state' $true "Laptop, $state, $pct% charge"
+    }
+} catch {
+    Write-Check 'Power state' $true $_.Exception.Message
+}
+
+# 49. Locale + time zone (due-date parsing)
+try {
+    $cult = (Get-Culture).Name
+    $tz = (Get-TimeZone).Id
+    Write-Check 'Locale + time zone' $true "$cult / $tz"
+} catch {
+    Write-Check 'Locale + time zone' $false $_.Exception.Message
+}
+
+# 50. PowerShell host bitness (x64 vs x86 affects COM marshalling)
+try {
+    $is64 = [Environment]::Is64BitProcess
+    $osIs64 = [Environment]::Is64BitOperatingSystem
+    $detail = "Process: $(if ($is64) {'x64'} else {'x86'}), OS: $(if ($osIs64) {'x64'} else {'x86'})"
+    Write-Check 'PowerShell host bitness' $true $detail
+} catch {
+    Write-Check 'PowerShell host bitness' $false $_.Exception.Message
+}
+
+# 51. Long path support enabled (affects deep %USERPROFILE% paths)
+try {
+    $k = 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem'
+    $lp = (Get-ItemProperty -Path $k -Name LongPathsEnabled -ErrorAction SilentlyContinue).LongPathsEnabled
+    $ok = ($lp -eq 1)
+    Write-Check 'Long path support' $ok "LongPathsEnabled = $lp"
+} catch {
+    Write-Check 'Long path support' $true 'Key absent — assume off (260 char limit applies)'
+}
+
+# 52. Free disk space on user profile drive (>100 MB for safety margin)
+try {
+    $drive = (Get-Item $env:USERPROFILE).PSDrive.Name
+    $free = (Get-PSDrive $drive).Free
+    $mb = [math]::Round($free / 1MB)
+    $ok = ($mb -ge 100)
+    Write-Check "Free space on $drive`: drive" $ok "$mb MB free"
+} catch {
+    Write-Check 'Free space on user profile drive' $false $_.Exception.Message
+}
+
+# 53. TEMP directory writable (fallback if ~/.vigil is locked)
+try {
+    $probe = Join-Path $env:TEMP ".vigil-temp-probe-$([Guid]::NewGuid().ToString('N'))"
+    Set-Content -Path $probe -Value 'ok' -Encoding UTF8
+    Remove-Item $probe -Force
+    Write-Check 'TEMP directory writable' $true $env:TEMP
+} catch {
+    Write-Check 'TEMP directory writable' $false $_.Exception.Message
+}
+
+# 54. Focus Assist state (informational — affects future toast feature)
+try {
+    $k = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Notifications\Settings'
+    $fa = (Get-ItemProperty -Path $k -Name NOC_GLOBAL_SETTING_TOASTS_ENABLED -ErrorAction SilentlyContinue).NOC_GLOBAL_SETTING_TOASTS_ENABLED
+    $toastsOn = ($fa -ne 0)
+    Write-Check 'Toast notifications allowed (global)' $toastsOn "NOC_GLOBAL_SETTING_TOASTS_ENABLED = $fa"
+} catch {
+    Write-Check 'Toast notifications allowed (global)' $true 'Key absent — assume on'
+}
+
+# 55. Existing VIGIL install detection (prior version?)
+try {
+    $lnk = Join-Path ([Environment]::GetFolderPath('Startup')) 'VIGIL.lnk'
+    $ps1 = Join-Path $env:USERPROFILE '.vigil\VIGIL.ps1'
+    $tasks = Join-Path $env:USERPROFILE '.vigil\tasks.json'
+    $has = (Test-Path $lnk) -or (Test-Path $ps1) -or (Test-Path $tasks)
+    $detail = if ($has) { 'Prior install found — upgrade path' } else { 'Clean machine' }
+    Write-Check 'Prior VIGIL install state' $true $detail
+} catch {
+    Write-Check 'Prior VIGIL install state' $true $_.Exception.Message
+}
+
 # --- Summary + compact result string ---
 
 $total  = $results.Count
@@ -537,7 +758,7 @@ if ($TenantId) {
     $tenantTag = 'detected'
 }
 
-$resultString = "VIGIL:v1:{0}:{1}:P{2}:F{3}:T{4}" -f $total, $hex, $passed, $failed, $tenantTag
+$resultString = "VIGIL:v2:{0}:{1}:P{2}:F{3}:T{4}" -f $total, $hex, $passed, $failed, $tenantTag
 
 Write-Host ""
 Write-Host "Paste this single line back for remote triage:" -ForegroundColor Cyan

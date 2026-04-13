@@ -1,9 +1,11 @@
 # VIGIL Preflight Result String — Decoder Reference
 
+**Current schema: v2 (55 checks).** v1 (35 checks) is frozen.
+
 When you run `preflight.ps1` on the corp machine, the last line looks like:
 
 ```
-VIGIL:v1:35:7FFFFFFFE:P34:F1:Tmatch
+VIGIL:v2:55:7FFFFFFFFFFFFFE:P54:F1:Tmatch
 ```
 
 Paste **only that line** back. It fully encodes what passed and what failed.
@@ -16,14 +18,14 @@ VIGIL : v1 : <count> : <hexBitmap> : P<pass> : F<fail> : T<tenantTag>
 
 | Field | Meaning |
 |---|---|
-| `v1` | Schema version — bump if check order changes |
-| `<count>` | Total checks run (35 in current script) |
+| `v2` | Schema version — bump if check order changes |
+| `<count>` | Total checks run (55 in current script) |
 | `<hexBitmap>` | Big-endian hex. **Bit 0 (LSB) = check #1, bit N-1 = check #N.** `1` = pass, `0` = fail. |
 | `P<pass>` | Passed count |
 | `F<fail>` | Failed count |
 | `T<tenantTag>` | `none` \| `detected` \| `match` \| `mismatch` |
 
-## Canonical check order (schema v1)
+## Canonical check order (schema v2)
 
 Check N → bit (N-1) of the hex bitmap.
 
@@ -64,6 +66,26 @@ Check N → bit (N-1) of the hex bitmap.
 | 33 | System proxy visible | Informational |
 | 34 | Microsoft.Graph module | Informational — Phase 5 feasibility |
 | 35 | Running as non-admin (as intended) | If FAIL, re-run as regular user |
+| 36 | Windows version + build | Informational. Detail gates Mica (build ≥ 22000) and PerMonitorV2. |
+| 37 | Outlook version + install path | Informational. Tells me x86 vs x64, 2016/2019/365. |
+| 38 | Outlook process currently running | Routing: GetActiveObject vs launch-Outlook path. |
+| 39 | Windows app theme (light/dark) | Auto-theme VIGIL to match OS. |
+| 40 | Transparency effects enabled | If FAIL, skip glass/blur entirely — flat fill. |
+| 41 | System accent color | Informational only. |
+| 42 | Display layout (count + primary res) | Widget position clamp + quick-add popup routing. |
+| 43 | System DPI + scale factor | Widget pixel math. |
+| 44 | High contrast mode OFF | If FAIL, disable translucency and honor system colors. |
+| 45 | Window animations enabled | If FAIL, drop all WPF storyboards (respect user pref). |
+| 46 | WPF render tier | If tier 0 (software), drop GPU animations. |
+| 47 | Console (non-remote) session | If FAIL, widget strategy changes — no glass in RDP/Citrix. |
+| 48 | Power state | Informational. Could defer sync on battery in Phase 5. |
+| 49 | Locale + time zone | Due-date parsing culture. |
+| 50 | PowerShell host bitness | COM marshalling — must match Outlook bitness. |
+| 51 | Long path support | If FAIL, warn on paths near 260 chars. |
+| 52 | Free space on user profile drive | If FAIL (<100MB), abort install. |
+| 53 | TEMP directory writable | Fallback atomic-write location. |
+| 54 | Toast notifications allowed | Informational — Phase 5 toast feasibility. |
+| 55 | Prior VIGIL install state | If TRUE in detail, trigger upgrade path. |
 
 ## Fatal checks (any one failing = VIGIL as designed cannot run)
 
@@ -89,9 +111,27 @@ Check N → bit (N-1) of the hex bitmap.
 | #27 returns `mismatch` | Stop. Wrong machine / wrong tenant. |
 | #22 fails | **Hard stop.** No workaround — EDR is blocking inline C# compilation. Escalate to IT. |
 
+## Feature decisions from v2-only checks
+
+| Signal | Decision |
+|---|---|
+| #36 detail shows build < 22000 | Use flat `rgba(0,0,0,0.80)` for title bar instead of Mica |
+| #37 shows Outlook x86 and #50 shows PS x64 (or vice versa) | Force 32-bit PowerShell for COM — add launcher wrapper |
+| #38 = not running at launch | Phase 3 startup sync shows "connecting..." placeholder for 2-3s |
+| #39 detail = light | Ship light-mode variant of the Apple skin |
+| #40 FAIL or #44 FAIL or #47 FAIL (any of them) | Skip all glass/blur/transparency. Flat fill only. |
+| #42 detail shows > 1 display | Quick-add popup uses `Screen.FromPoint(Cursor.Position)` |
+| #43 scale != 1.0 | Scale widget dimensions by DPI ratio at startup |
+| #45 FAIL | Remove all `Storyboard` animations — respect reduced motion |
+| #46 tier 0 | Drop completion fade + sync spin — static UI |
+| #49 non-English locale | Use `CultureInfo.CurrentCulture` for dueLabel formatting |
+| #51 FAIL | Validate `~/.vigil` path length + warn if close to 260 chars |
+| #52 FAIL | **Block install.** Cannot safely atomic-write with <100 MB free. |
+| #55 shows prior install | Read existing tasks.json and migrate schema if needed |
+
 ## Example decode (by hand)
 
-String: `VIGIL:v1:35:7FFFFFFFF:P35:F0:Tnone`
+String: `VIGIL:v2:55:7FFFFFFFFFFFFFF:P55:F0:Tnone`
 
 - Count = 35
 - Hex `7FFFFFFFF` = 34 bits set (0x7FFFFFFFF is 35 bits, but MSB bit 34 is 0 — wait, `0x7FFFFFFFF` is 35 bits 0..34 all set, 35 checks pass)
