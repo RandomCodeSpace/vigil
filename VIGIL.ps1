@@ -7,14 +7,13 @@
 #
 # Usage: powershell -ExecutionPolicy Bypass -WindowStyle Hidden -File .\VIGIL.ps1
 
-[CmdletBinding()]
 param(
-    [switch]$NoUI    # Define functions only, skip WPF/hotkey/ShowDialog. Used by Test-Vigil.ps1.
+    [switch]$NoUI
 )
 
 # Build stamp - bumped on every commit. Visible in status bar + vigil.log.
 # Format: YYYY-MM-DD HH:MM (UTC)  buildN
-$script:VigilVersion = '2026-04-14 03:10 UTC  build30 overdue-label-fix'
+$script:VigilVersion = '2026-04-14 03:10 UTC  build31 no-cmdletbinding'
 
 $ErrorActionPreference = 'Stop'
 
