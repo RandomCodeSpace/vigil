@@ -13,7 +13,7 @@ param(
 
 # Build stamp - bumped on every commit. Visible in status bar + vigil.log.
 # Format: YYYY-MM-DD HH:MM (UTC)  buildN
-$script:VigilVersion = '2026-04-13 15:30 UTC  build61 onedrive-storage'
+$script:VigilVersion = '2026-04-13 15:40 UTC  build62 pwsh-required'
 
 $ErrorActionPreference = 'Stop'
 
@@ -705,9 +705,12 @@ function Install-VigilStartupShortcut {
         $startupDir = [Environment]::GetFolderPath('Startup')
         if (-not (Test-Path $startupDir)) { return }
         $lnkPath = Join-Path $startupDir 'VIGIL.lnk'
-        # Prefer pwsh 7.x; fall back to Windows PowerShell 5.1 if not installed.
+        # VIGIL requires PowerShell 7.x (pwsh.exe). Do not fall back to 5.1.
         $launcher = Find-VigilPwshExe
-        if (-not $launcher) { $launcher = Join-Path $PSHOME 'powershell.exe' }
+        if (-not $launcher) {
+            Write-VigilLog 'Startup shortcut skipped: pwsh.exe not found (PowerShell 7+ required)'
+            return
+        }
         $wsh = New-Object -ComObject WScript.Shell
         try {
             $shortcut = $wsh.CreateShortcut($lnkPath)
@@ -738,8 +741,12 @@ function Install-VigilDesktopShortcut {
         if (-not $desktopDir -or -not (Test-Path $desktopDir)) { return }
         $lnkPath = Join-Path $desktopDir 'VIGIL.lnk'
         if (Test-Path $lnkPath) { return }
+        # VIGIL requires PowerShell 7.x (pwsh.exe). Do not fall back to 5.1.
         $launcher = Find-VigilPwshExe
-        if (-not $launcher) { $launcher = Join-Path $PSHOME 'powershell.exe' }
+        if (-not $launcher) {
+            Write-VigilLog 'Desktop shortcut skipped: pwsh.exe not found (PowerShell 7+ required)'
+            return
+        }
         $scriptPath = $PSCommandPath
         if (-not $scriptPath) { $scriptPath = $MyInvocation.MyCommand.Path }
         $wsh = New-Object -ComObject WScript.Shell
