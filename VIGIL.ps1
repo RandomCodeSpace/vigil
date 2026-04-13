@@ -13,7 +13,7 @@ param(
 
 # Build stamp - bumped on every commit. Visible in status bar + vigil.log.
 # Format: YYYY-MM-DD HH:MM (UTC)  buildN
-$script:VigilVersion = '2026-04-14 03:10 UTC  build44 net9-thememode'
+$script:VigilVersion = '2026-04-14 03:10 UTC  build45 full-fluent'
 
 $ErrorActionPreference = 'Stop'
 
@@ -810,98 +810,6 @@ $xaml = @'
     <SolidColorBrush x:Key="Warn"           Color="#FF9F0A"/>
     <SolidColorBrush x:Key="Success"        Color="#32D74B"/>
 
-    <!-- Icon button: tight 22x22, no corners, hairline-only hover -->
-    <Style x:Key="IconButton" TargetType="Button">
-      <Setter Property="Background" Value="Transparent"/>
-      <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
-      <Setter Property="BorderThickness" Value="0"/>
-      <Setter Property="Width" Value="22"/>
-      <Setter Property="Height" Value="22"/>
-      <Setter Property="FontSize" Value="10"/>
-      <Setter Property="Cursor" Value="Hand"/>
-      <Setter Property="Template">
-        <Setter.Value>
-          <ControlTemplate TargetType="Button">
-            <Border x:Name="bg" Background="{TemplateBinding Background}">
-              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-            </Border>
-          </ControlTemplate>
-        </Setter.Value>
-      </Setter>
-      <Style.Triggers>
-        <Trigger Property="IsMouseOver" Value="True">
-          <Setter Property="Background" Value="{StaticResource SurfaceHover}"/>
-          <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
-        </Trigger>
-      </Style.Triggers>
-    </Style>
-
-    <!-- Close button with red hover -->
-    <Style x:Key="CloseButton" TargetType="Button" BasedOn="{StaticResource IconButton}">
-      <Style.Triggers>
-        <Trigger Property="IsMouseOver" Value="True">
-          <Setter Property="Background" Value="#2A0E0C"/>
-          <Setter Property="Foreground" Value="{StaticResource Urgent}"/>
-        </Trigger>
-      </Style.Triggers>
-    </Style>
-
-    <!-- Primary button: flat, sharp, tight -->
-    <Style x:Key="PrimaryButton" TargetType="Button">
-      <Setter Property="Background" Value="{StaticResource Accent}"/>
-      <Setter Property="Foreground" Value="{StaticResource AccentInvert}"/>
-      <Setter Property="BorderThickness" Value="0"/>
-      <Setter Property="Padding" Value="12,6"/>
-      <Setter Property="FontSize" Value="11"/>
-      <Setter Property="FontWeight" Value="SemiBold"/>
-      <Setter Property="Cursor" Value="Hand"/>
-      <Setter Property="Template">
-        <Setter.Value>
-          <ControlTemplate TargetType="Button">
-            <Border Background="{TemplateBinding Background}"
-                    Padding="{TemplateBinding Padding}">
-              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-            </Border>
-          </ControlTemplate>
-        </Setter.Value>
-      </Setter>
-      <Style.Triggers>
-        <Trigger Property="IsMouseOver" Value="True">
-          <Setter Property="Background" Value="#E5E5E5"/>
-        </Trigger>
-      </Style.Triggers>
-    </Style>
-
-    <!-- Ghost button: sharp, hairline border, tight -->
-    <Style x:Key="GhostButton" TargetType="Button">
-      <Setter Property="Background" Value="Transparent"/>
-      <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
-      <Setter Property="BorderBrush" Value="{StaticResource BorderSubtle}"/>
-      <Setter Property="BorderThickness" Value="1"/>
-      <Setter Property="Padding" Value="8,3"/>
-      <Setter Property="FontSize" Value="10"/>
-      <Setter Property="Cursor" Value="Hand"/>
-      <Setter Property="Template">
-        <Setter.Value>
-          <ControlTemplate TargetType="Button">
-            <Border Background="{TemplateBinding Background}"
-                    BorderBrush="{TemplateBinding BorderBrush}"
-                    BorderThickness="{TemplateBinding BorderThickness}"
-                    Padding="{TemplateBinding Padding}">
-              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-            </Border>
-          </ControlTemplate>
-        </Setter.Value>
-      </Setter>
-      <Style.Triggers>
-        <Trigger Property="IsMouseOver" Value="True">
-          <Setter Property="Background" Value="{StaticResource SurfaceElev2}"/>
-          <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
-          <Setter Property="BorderBrush" Value="{StaticResource TextSecondary}"/>
-        </Trigger>
-      </Style.Triggers>
-    </Style>
-
   </Window.Resources>
 
   <Border x:Name="OuterFrame" CornerRadius="0" Background="Transparent"
@@ -915,7 +823,7 @@ $xaml = @'
       </Grid.RowDefinitions>
 
       <!-- Title bar -->
-      <Border Grid.Row="0" x:Name="TitleBar" Background="{StaticResource SurfaceElev1}"
+      <Border Grid.Row="0" x:Name="TitleBar" Background="Transparent"
               CornerRadius="0" Padding="12,0" Height="38"
               BorderBrush="{StaticResource Divider}" BorderThickness="0,0,0,1">
         <Grid>
@@ -949,19 +857,19 @@ $xaml = @'
 
           <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
             <Button x:Name="BtnSync" Content="SYNC"
-                    Style="{StaticResource GhostButton}" Margin="0,0,4,0"
+                    Margin="0,0,4,0"
                     ToolTip="Sync from Outlook"/>
             <Button x:Name="BtnSort" Content="SMART"
-                    Style="{StaticResource GhostButton}" Margin="0,0,6,0"
+                    Margin="0,0,6,0"
                     ToolTip="Sort / Filter"/>
           </StackPanel>
 
           <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center">
-            <Button x:Name="BtnCollapse" Style="{StaticResource IconButton}" ToolTip="Minimize">
+            <Button x:Name="BtnCollapse" ToolTip="Minimize">
               <Path Data="M0,0 L8,0" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                     StrokeThickness="1.2" StrokeStartLineCap="Flat" StrokeEndLineCap="Flat"/>
             </Button>
-            <Button x:Name="BtnClose" Style="{StaticResource CloseButton}" ToolTip="Close" Margin="1,0,0,0">
+            <Button x:Name="BtnClose" ToolTip="Close" Margin="1,0,0,0">
               <Path Data="M0,0 L8,8 M8,0 L0,8" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                     StrokeThickness="1.2" StrokeStartLineCap="Flat" StrokeEndLineCap="Flat"/>
             </Button>
@@ -984,29 +892,22 @@ $xaml = @'
       </Border>
 
       <!-- Inline add: flat input with bottom hairline, no box -->
-      <Border Grid.Row="2" x:Name="AddArea" Background="{StaticResource SurfaceElev1}"
+      <Border Grid.Row="2" x:Name="AddArea" Background="Transparent"
               BorderBrush="{StaticResource Divider}" BorderThickness="0,1,0,0" Padding="12,8">
         <Grid>
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*"/>
             <ColumnDefinition Width="Auto"/>
           </Grid.ColumnDefinitions>
-          <Border Grid.Column="0" Background="{StaticResource SurfaceElev2}"
-                  BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1"
-                  CornerRadius="0">
-            <TextBox x:Name="AddInput" Background="Transparent"
-                     Foreground="{StaticResource TextPrimary}"
-                     BorderThickness="0" Padding="8,5" FontSize="12"
-                     CaretBrush="{StaticResource Accent}"
-                     VerticalContentAlignment="Center"/>
-          </Border>
-          <Button Grid.Column="1" x:Name="BtnAdd" Content="ADD"
-                  Style="{StaticResource PrimaryButton}" Margin="6,0,0,0"/>
+          <TextBox Grid.Column="0" x:Name="AddInput" FontSize="13"
+                   VerticalContentAlignment="Center"/>
+          <Button Grid.Column="1" x:Name="BtnAdd" Content="Add"
+                  Margin="8,0,0,0" MinWidth="60"/>
         </Grid>
       </Border>
 
       <!-- Status bar: monospace, tight -->
-      <Border Grid.Row="3" x:Name="StatusArea" Background="{StaticResource SurfaceElev1}"
+      <Border Grid.Row="3" x:Name="StatusArea" Background="Transparent"
               BorderBrush="{StaticResource Divider}" BorderThickness="0,1,0,0"
               CornerRadius="0" Padding="12,5">
         <Grid>
@@ -1076,17 +977,25 @@ $window.Left = [math]::Max($wa.X, [math]::Min($Global:VigilSettings.posX, $wa.Ri
 $window.Top  = [math]::Max($wa.Y, [math]::Min($Global:VigilSettings.posY, $wa.Bottom - 460))
 
 # --- Rendering -------------------------------------------------------------
+function Get-VigilBrush([string]$key, $fallbackColor) {
+    # Pull a brush from Fluent's DynamicResource dictionary; fall back to a
+    # hard-coded Color if Fluent isn't loaded.
+    try {
+        $r = $window.TryFindResource($key)
+        if ($r) { return $r }
+    } catch {}
+    return (New-Object System.Windows.Media.SolidColorBrush $fallbackColor)
+}
+
 function Build-TaskCard($task) {
-    # Tactical row: no radius, hairline bottom separator, 2px left accent
-    # bar for critical/high/overdue. No card background - the row sits on
-    # the SurfaceBase canvas directly.
+    # Fluent-styled row: uses Fluent layer + fill brushes. 2px left accent
+    # bar only for critical/overdue (red) and high (caution amber).
     $border = New-Object System.Windows.Controls.Border
     $border.Margin = New-Object System.Windows.Thickness(0,0,0,0)
-    $border.Padding = New-Object System.Windows.Thickness(10,7,10,7)
-    $border.CornerRadius = New-Object System.Windows.CornerRadius(0)
-    $hairline = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromRgb(31,31,31))
+    $border.Padding = New-Object System.Windows.Thickness(12,10,12,10)
     $border.Background = [System.Windows.Media.Brushes]::Transparent
-    $border.BorderBrush = $hairline
+    $dividerBrush = Get-VigilBrush 'DividerStrokeColorDefaultBrush' ([System.Windows.Media.Color]::FromRgb(31,31,31))
+    $border.BorderBrush = $dividerBrush
     $border.BorderThickness = New-Object System.Windows.Thickness(0,0,0,1)
     $border.Cursor = [System.Windows.Input.Cursors]::Hand
 
@@ -1094,15 +1003,14 @@ function Build-TaskCard($task) {
     if ($task.dueDate) {
         try { $isOverdue = ([datetime]::Parse($task.dueDate) -lt (Get-Date)) -and -not $task.done } catch {}
     }
-    # 2px left accent stripe for critical/overdue/high
     if ($task.priority -eq 'critical' -or $isOverdue) {
-        $urgentBr = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromRgb(255,59,48))
-        $border.BorderBrush = $urgentBr
-        $border.BorderThickness = New-Object System.Windows.Thickness(2,0,0,1)
+        $critBrush = Get-VigilBrush 'SystemFillColorCriticalBrush' ([System.Windows.Media.Color]::FromRgb(255,59,48))
+        $border.BorderBrush = $critBrush
+        $border.BorderThickness = New-Object System.Windows.Thickness(3,0,0,1)
     } elseif ($task.priority -eq 'high') {
-        $warnBr = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromRgb(255,159,10))
-        $border.BorderBrush = $warnBr
-        $border.BorderThickness = New-Object System.Windows.Thickness(2,0,0,1)
+        $warnBrush = Get-VigilBrush 'SystemFillColorCautionBrush' ([System.Windows.Media.Color]::FromRgb(255,159,10))
+        $border.BorderBrush = $warnBrush
+        $border.BorderThickness = New-Object System.Windows.Thickness(3,0,0,1)
     }
 
     $grid = New-Object System.Windows.Controls.Grid
@@ -1110,31 +1018,31 @@ function Build-TaskCard($task) {
     $c2 = New-Object System.Windows.Controls.ColumnDefinition; $c2.Width = New-Object System.Windows.GridLength(1, 'Star')
     $grid.ColumnDefinitions.Add($c1); $grid.ColumnDefinitions.Add($c2)
 
+    # Default CheckBox - Fluent template
     $check = New-Object System.Windows.Controls.CheckBox
     $check.IsChecked = $task.done
-    $check.Margin = New-Object System.Windows.Thickness(0,1,10,0)
+    $check.Margin = New-Object System.Windows.Thickness(0,2,12,0)
     $check.VerticalAlignment = 'Top'
-    $check.Foreground = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromRgb(136,136,136))
     [System.Windows.Controls.Grid]::SetColumn($check, 0)
 
     $stack = New-Object System.Windows.Controls.StackPanel
     [System.Windows.Controls.Grid]::SetColumn($stack, 1)
 
-    $primaryText   = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromRgb(250,250,250))
-    $secondaryText = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromRgb(136,136,136))
-    $tertiaryText  = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromRgb(77,77,77))
-    $urgentText    = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromRgb(255,59,48))
+    $secondaryText = Get-VigilBrush 'TextFillColorSecondaryBrush' ([System.Windows.Media.Color]::FromRgb(136,136,136))
+    $tertiaryText  = Get-VigilBrush 'TextFillColorTertiaryBrush'  ([System.Windows.Media.Color]::FromRgb(77,77,77))
+    $urgentText    = Get-VigilBrush 'SystemFillColorCriticalBrush' ([System.Windows.Media.Color]::FromRgb(255,59,48))
 
     $title = New-Object System.Windows.Controls.TextBlock
     $title.Text = $task.title
-    $title.FontSize = 13
-    $title.LineHeight = 17
+    $title.FontSize = 14
+    $title.LineHeight = 19
     $title.TextWrapping = 'Wrap'
+    # Leave Foreground unset - inherits Fluent TextFillColorPrimaryBrush
     switch ($task.priority) {
-        'critical' { $title.FontWeight = 'Bold';     $title.Foreground = $primaryText }
-        'high'     { $title.FontWeight = 'SemiBold'; $title.Foreground = $primaryText }
-        'normal'   { $title.FontWeight = 'Normal';   $title.Foreground = $primaryText }
-        'low'      { $title.FontWeight = 'Normal';   $title.Foreground = $secondaryText }
+        'critical' { $title.FontWeight = 'Bold'     }
+        'high'     { $title.FontWeight = 'SemiBold' }
+        'normal'   { $title.FontWeight = 'Normal'   }
+        'low'      { $title.FontWeight = 'Normal';  $title.Foreground = $secondaryText }
     }
     if ($task.done) {
         $title.TextDecorations = [System.Windows.TextDecorations]::Strikethrough
@@ -1148,10 +1056,9 @@ function Build-TaskCard($task) {
     if ($task.source -ne 'manual') { $metaText += ($task.source -replace 'outlook-','') }
     if ($metaText.Count -gt 0) {
         $meta = New-Object System.Windows.Controls.TextBlock
-        $meta.Text = ($metaText -join '  ')
-        $meta.FontSize = 10
-        $meta.FontFamily = New-Object System.Windows.Media.FontFamily('Consolas, Cascadia Mono, Courier New')
-        $meta.Margin = New-Object System.Windows.Thickness(0,3,0,0)
+        $meta.Text = ($metaText -join '  |  ')
+        $meta.FontSize = 11
+        $meta.Margin = New-Object System.Windows.Thickness(0,4,0,0)
         if ($isOverdue) { $meta.Foreground = $urgentText; $meta.FontWeight = 'SemiBold' }
         else            { $meta.Foreground = $tertiaryText }
         $stack.Children.Add($meta) | Out-Null
@@ -1337,28 +1244,17 @@ $editPromptXaml = @'
         UseLayoutRounding="True" SnapsToDevicePixels="True"
         FontFamily="Segoe UI"
         WindowStartupLocation="Manual">
-  <Border CornerRadius="0" Background="#0A0A0A"
-          BorderBrush="#2A2A2A" BorderThickness="1" Margin="14">
-    <StackPanel Margin="22,20,22,20">
-      <TextBlock x:Name="EditLabel" Text="Edit" FontSize="15" FontWeight="SemiBold"
-                 Foreground="#FAFAFA" Margin="0,0,0,12"/>
-      <Border Background="#1E1E1E" BorderBrush="#2A2A2A" BorderThickness="1" CornerRadius="0">
-        <TextBox x:Name="EditText" Background="Transparent" BorderThickness="0"
-                 Foreground="#FAFAFA" Padding="12,10" FontSize="14" MinHeight="40"
-                 TextWrapping="Wrap" AcceptsReturn="True"
-                 CaretBrush="#FAFAFA" VerticalContentAlignment="Top"/>
-      </Border>
-      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
-        <Button x:Name="BtnEditCancel" Content="Cancel"
-                Background="Transparent" Foreground="#888888" BorderThickness="0"
-                Padding="14,8" FontSize="12" Cursor="Hand"/>
-        <Button x:Name="BtnEditSave" Content="Save"
-                Background="#FAFAFA" Foreground="#0A0A0A" BorderThickness="0"
-                Padding="20,8" FontSize="12" FontWeight="SemiBold"
-                Margin="8,0,0,0" Cursor="Hand"/>
-      </StackPanel>
+  <StackPanel Margin="20">
+    <TextBlock x:Name="EditLabel" Text="Edit" FontSize="16" FontWeight="SemiBold"
+               Margin="0,0,0,12"/>
+    <TextBox x:Name="EditText" MinHeight="60" FontSize="14"
+             TextWrapping="Wrap" AcceptsReturn="True"
+             VerticalContentAlignment="Top"/>
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+      <Button x:Name="BtnEditCancel" Content="Cancel" MinWidth="80"/>
+      <Button x:Name="BtnEditSave" Content="Save" Margin="8,0,0,0" MinWidth="80"/>
     </StackPanel>
-  </Border>
+  </StackPanel>
 </Window>
 '@
 
@@ -1608,34 +1504,20 @@ $quickAddXaml = @'
         UseLayoutRounding="True" SnapsToDevicePixels="True"
         FontFamily="Segoe UI"
         WindowStartupLocation="Manual">
-  <Border CornerRadius="0" Background="#0A0A0A"
-          BorderBrush="#2A2A2A" BorderThickness="1" Margin="14">
-    <StackPanel Margin="22,20,22,20">
-      <TextBlock Text="New task" FontSize="15" FontWeight="SemiBold"
-                 Foreground="#FAFAFA" Margin="0,0,0,12"/>
-      <Border Background="#1E1E1E" BorderBrush="#2A2A2A" BorderThickness="1"
-              CornerRadius="0">
-        <TextBox x:Name="TxtTitle" Background="Transparent" BorderThickness="0"
-                 Foreground="#FAFAFA" Padding="12,10" FontSize="14"
-                 CaretBrush="#FAFAFA" VerticalContentAlignment="Center"/>
-      </Border>
-      <TextBlock Text="PRIORITY" FontSize="10" FontWeight="Bold"
-                 Foreground="#4D4D4D" Margin="2,16,0,6"/>
-      <StackPanel x:Name="PriorityRow" Orientation="Horizontal"/>
-      <TextBlock Text="DUE" FontSize="10" FontWeight="Bold"
-                 Foreground="#4D4D4D" Margin="2,14,0,6"/>
-      <StackPanel x:Name="DueRow" Orientation="Horizontal"/>
-      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
-        <Button x:Name="BtnQCancel" Content="Cancel"
-                Background="Transparent" Foreground="#888888" BorderThickness="0"
-                Padding="14,8" FontSize="12" Cursor="Hand"/>
-        <Button x:Name="BtnQSave" Content="Add task"
-                Background="#FAFAFA" Foreground="#0A0A0A" BorderThickness="0"
-                Padding="20,8" FontSize="12" FontWeight="SemiBold"
-                Margin="8,0,0,0" Cursor="Hand"/>
-      </StackPanel>
+  <StackPanel Margin="20">
+    <TextBlock Text="New task" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,12"/>
+    <TextBox x:Name="TxtTitle" FontSize="14" VerticalContentAlignment="Center"/>
+    <TextBlock Text="PRIORITY" FontSize="11" FontWeight="SemiBold"
+               Opacity="0.6" Margin="2,16,0,6"/>
+    <StackPanel x:Name="PriorityRow" Orientation="Horizontal"/>
+    <TextBlock Text="DUE" FontSize="11" FontWeight="SemiBold"
+               Opacity="0.6" Margin="2,14,0,6"/>
+    <StackPanel x:Name="DueRow" Orientation="Horizontal"/>
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
+      <Button x:Name="BtnQCancel" Content="Cancel" MinWidth="80"/>
+      <Button x:Name="BtnQSave" Content="Add task" Margin="8,0,0,0" MinWidth="80"/>
     </StackPanel>
-  </Border>
+  </StackPanel>
 </Window>
 '@
 
