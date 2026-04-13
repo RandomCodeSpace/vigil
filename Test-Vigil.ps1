@@ -232,6 +232,280 @@ Assert-Eq 9999 $settings3.posX 'partial settings keeps posX from file'
 Assert-Eq 'smart' $settings3.sortMode 'missing sortMode defaults from merge'
 
 # --------------------------------------------------------------------------
+Section 'Update-VigilTask - mutate individual fields'
+# --------------------------------------------------------------------------
+
+$addMe = New-VigilTask -Title 'original' -Priority 'low'
+Save-VigilTasks @($addMe)
+
+$ok = Update-VigilTask -Id $addMe.id -Title 'updated'
+Assert-True $ok 'Update returns true when task found'
+$reloaded = Get-VigilTaskById $addMe.id
+Assert-Eq 'updated' $reloaded.title 'title updated via Update-VigilTask'
+
+[void](Update-VigilTask -Id $addMe.id -Priority 'critical')
+$reloaded = Get-VigilTaskById $addMe.id
+Assert-Eq 'critical' $reloaded.priority 'priority updated'
+
+[void](Update-VigilTask -Id $addMe.id -Priority 'garbage')
+$reloaded = Get-VigilTaskById $addMe.id
+Assert-Eq 'critical' $reloaded.priority 'invalid priority rejected'
+
+[void](Update-VigilTask -Id $addMe.id -Notes 'remember to test')
+$reloaded = Get-VigilTaskById $addMe.id
+Assert-Eq 'remember to test' $reloaded.notes 'notes updated'
+
+[void](Update-VigilTask -Id $addMe.id -Done $true)
+$reloaded = Get-VigilTaskById $addMe.id
+Assert-Eq $true $reloaded.done 'done flag set'
+Assert-True ($reloaded.doneAt -ne '') 'doneAt timestamp set'
+
+$missing = Update-VigilTask -Id 'nonexistent' -Title 'nope'
+Assert-Eq $false $missing 'Update returns false for missing id'
+
+# --------------------------------------------------------------------------
+Section 'Add-VigilTask / Remove-VigilTask'
+# --------------------------------------------------------------------------
+
+Save-VigilTasks @()
+$t1 = Add-VigilTask (New-VigilTask -Title 'add1' -Priority 'normal')
+$t2 = Add-VigilTask (New-VigilTask -Title 'add2' -Priority 'high')
+$all = @(Load-VigilTasks)
+Assert-Count 2 $all 'Add-VigilTask appends to disk'
+
+$removed = Remove-VigilTask $t1.id
+Assert-True $removed 'Remove returns true when removed'
+$all = @(Load-VigilTasks)
+Assert-Count 1 $all 'Remove-VigilTask removes by id'
+Assert-Eq 'add2' $all[0].title 'correct task remains'
+
+$removed2 = Remove-VigilTask 'nope'
+Assert-Eq $false $removed2 'Remove returns false when not found'
+
+# --------------------------------------------------------------------------
+Section 'Get-VigilOverdueTasks'
+# --------------------------------------------------------------------------
+
+$tnow = Get-Date
+$overFix = @(
+    (New-VigilTask -Title 'past'   -Priority 'normal' -DueDate $tnow.AddHours(-2))
+    (New-VigilTask -Title 'future' -Priority 'normal' -DueDate $tnow.AddHours(4))
+    (New-VigilTask -Title 'no-due' -Priority 'normal')
+)
+$doneOverdue = New-VigilTask -Title 'past-done' -Priority 'normal' -DueDate $tnow.AddHours(-3)
+$doneOverdue.done = $true
+$overFix += $doneOverdue
+
+$overdueList = @(Get-VigilOverdueTasks -tasks $overFix)
+Assert-Count 1 $overdueList 'Overdue returns only active past-due'
+Assert-Eq 'past' $overdueList[0].title 'correct overdue task'
+
+# --------------------------------------------------------------------------
+Section 'Export-VigilMarkdown'
+# --------------------------------------------------------------------------
+
+$exportFixture = @(
+    (New-VigilTask -Title 'active-high' -Priority 'high')
+    (New-VigilTask -Title 'overdue-it'  -Priority 'critical' -DueDate $tnow.AddHours(-1))
+)
+$dTask = New-VigilTask -Title 'done-task' -Priority 'normal'
+$dTask.done = $true
+$exportFixture += $dTask
+
+$md = Export-VigilMarkdown -tasks $exportFixture
+Assert-True ($md -like '*# VIGIL Tasks*')     'header present'
+Assert-True ($md -like '*## Overdue*')        'overdue section present'
+Assert-True ($md -like '*## Active*')         'active section present'
+Assert-True ($md -like '*## Completed*')      'completed section present'
+Assert-True ($md -like '*overdue-it*')        'overdue task listed'
+Assert-True ($md -like '*active-high*')       'active task listed'
+Assert-True ($md.Contains('- [x] done-task'))   'done task uses [x] checkbox'
+Assert-True ($md.Contains('- [ ] active-high')) 'active task uses [ ] checkbox'
+
+# --------------------------------------------------------------------------
+Section 'Edge cases - empty inputs'
+# --------------------------------------------------------------------------
+
+$emptySort = @(Sort-VigilTasks -tasks @() -mode 'smart')
+Assert-Count 0 $emptySort 'Sort on empty returns empty'
+
+$emptyFilter = @(Filter-VigilTasks -tasks @() -mode 'urgent')
+Assert-Count 0 $emptyFilter 'Filter on empty returns empty'
+
+$emptyOverdue = @(Get-VigilOverdueTasks -tasks @())
+Assert-Count 0 $emptyOverdue 'Overdue on empty returns empty'
+
+$emptyMd = Export-VigilMarkdown -tasks @()
+Assert-True ($emptyMd.Contains('# VIGIL Tasks')) 'Export on empty still has header'
+Assert-True (-not $emptyMd.Contains('## Overdue')) 'Export on empty omits overdue section'
+Assert-True (-not $emptyMd.Contains('## Active'))  'Export on empty omits active section'
+
+Save-VigilTasks @()
+$loadedEmpty = @(Load-VigilTasks)
+Assert-Count 0 $loadedEmpty 'Round-trip empty array'
+
+# --------------------------------------------------------------------------
+Section 'Edge cases - malformed data resilience'
+# --------------------------------------------------------------------------
+
+$garbage = New-VigilTask -Title 'garbage due' -Priority 'normal'
+$garbage.dueDate = 'not-a-date'
+$mixedTasks = @((New-VigilTask -Title 'good' -Priority 'high'), $garbage)
+
+$sortedGarbage = @(Sort-VigilTasks -tasks $mixedTasks -mode 'smart')
+Assert-Count 2 $sortedGarbage 'Sort tolerates unparseable dueDate'
+
+$overdueGarbage = @(Get-VigilOverdueTasks -tasks $mixedTasks)
+Assert-Count 0 $overdueGarbage 'Unparseable dueDate not flagged as overdue'
+
+$labelGarbage = Format-DueLabel 'not-a-date'
+Assert-Eq '' $labelGarbage 'Format-DueLabel returns empty on garbage'
+
+$labelNull = Format-DueLabel $null
+Assert-Eq '' $labelNull 'Format-DueLabel returns empty on null'
+
+# --------------------------------------------------------------------------
+Section 'Edge cases - Format-DueLabel boundaries'
+# --------------------------------------------------------------------------
+
+$edgeNow = Get-Date
+$thisWeek = $edgeNow.AddDays(3).Date.AddHours(10)   # 3 days from now
+$label = Format-DueLabel $thisWeek.ToString('o')
+Assert-True ($label -notlike 'Overdue*') 'Within-week date not marked overdue'
+Assert-True ($label -notlike 'Today*')   'Within-week != Today'
+
+$farFuture = $edgeNow.AddDays(30).Date
+$labelFar = Format-DueLabel $farFuture.ToString('o')
+Assert-True ($labelFar.Length -gt 0) 'Far-future date formats to non-empty string'
+Assert-True ($labelFar -notlike 'Overdue*') 'Far-future not overdue'
+
+# Task due today but in the past -> Overdue HH:MM (not Today)
+$pastToday = $edgeNow.Date.AddHours(6)  # 6am today
+if ($pastToday -lt $edgeNow) {
+    $labelPT = Format-DueLabel $pastToday.ToString('o')
+    Assert-True ($labelPT -like 'Overdue*') 'Past-today shows Overdue, not Today'
+}
+
+# --------------------------------------------------------------------------
+Section 'Edge cases - sort / filter fall-through'
+# --------------------------------------------------------------------------
+
+$fixture4 = @(
+    (New-VigilTask -Title 'a' -Priority 'normal')
+    (New-VigilTask -Title 'b' -Priority 'high')
+)
+$unknownSort = @(Sort-VigilTasks -tasks $fixture4 -mode 'bogus')
+Assert-Count 2 $unknownSort 'Unknown sort mode falls through to smart'
+Assert-Eq 'b' $unknownSort[0].title 'Smart fallback: high before normal'
+
+$unknownFilter = @(Filter-VigilTasks -tasks $fixture4 -mode 'bogus')
+Assert-Count 2 $unknownFilter 'Unknown filter mode returns all'
+
+$allMode = @(Filter-VigilTasks -tasks $fixture4 -mode 'all')
+Assert-Count 2 $allMode 'Explicit "all" returns everything'
+
+# --------------------------------------------------------------------------
+Section 'Edge cases - Update-VigilTask no-op + empty values'
+# --------------------------------------------------------------------------
+
+Save-VigilTasks @()
+$noop = New-VigilTask -Title 'noop' -Priority 'normal'
+Save-VigilTasks @($noop)
+
+# Update with no fields specified = just Id + no mutation
+$noopResult = Update-VigilTask -Id $noop.id
+Assert-True $noopResult 'Update with no fields still returns true for found id'
+
+# Empty title should be rejected (title is required)
+[void](Update-VigilTask -Id $noop.id -Title '')
+$reloaded = Get-VigilTaskById $noop.id
+Assert-Eq 'noop' $reloaded.title 'Empty title rejected - original preserved'
+
+# DueDate can be explicitly cleared
+[void](Update-VigilTask -Id $noop.id -DueDate '')
+$reloaded = Get-VigilTaskById $noop.id
+Assert-Eq '' $reloaded.dueDate 'DueDate cleared via empty string'
+
+# Done = false explicit
+[void](Update-VigilTask -Id $noop.id -Done $true)
+[void](Update-VigilTask -Id $noop.id -Done $false)
+$reloaded = Get-VigilTaskById $noop.id
+Assert-Eq $false $reloaded.done 'Done can be toggled back to false'
+Assert-Eq '' $reloaded.doneAt  'doneAt cleared when un-done'
+
+# --------------------------------------------------------------------------
+Section 'Edge cases - very long title + special chars'
+# --------------------------------------------------------------------------
+
+$longTitle = 'x' * 500
+$longTask = New-VigilTask -Title $longTitle -Priority 'normal'
+Save-VigilTasks @($longTask)
+$reloaded = @(Load-VigilTasks)
+Assert-Eq $longTitle $reloaded[0].title 'Long title round-trips via JSON'
+
+$special = 'Task with "quotes" and \ backslash and `ticks and $vars'
+$specTask = New-VigilTask -Title $special -Priority 'low'
+Save-VigilTasks @($specTask)
+$reloaded = @(Load-VigilTasks)
+Assert-Eq $special $reloaded[0].title 'Special chars round-trip safely'
+
+# --------------------------------------------------------------------------
+Section 'Edge cases - settings file corruption'
+# --------------------------------------------------------------------------
+
+# Invalid JSON in settings file -> fall back to defaults
+[IO.File]::WriteAllText($script:SettingsPath, 'this is { not valid: json')
+$recovered = Load-VigilSettings
+Assert-Eq 'smart' $recovered.sortMode 'Corrupt settings falls back to default sortMode'
+Assert-True ($null -ne $recovered.posX) 'Corrupt settings still returns object'
+
+# Empty settings file
+[IO.File]::WriteAllText($script:SettingsPath, '')
+$emptyS = Load-VigilSettings
+Assert-Eq 'smart' $emptyS.sortMode 'Empty settings file -> defaults'
+
+# Delete settings file entirely
+Remove-Item $script:SettingsPath -ErrorAction SilentlyContinue
+$goneS = Load-VigilSettings
+Assert-Eq 'smart' $goneS.sortMode 'Missing settings file -> defaults'
+
+# --------------------------------------------------------------------------
+Section 'Edge cases - overdue sort order (priority within overdue)'
+# --------------------------------------------------------------------------
+
+$pastBase = (Get-Date).AddHours(-4)
+$overdueMix = @(
+    (New-VigilTask -Title 'overdue-low'      -Priority 'low'      -DueDate $pastBase)
+    (New-VigilTask -Title 'overdue-critical' -Priority 'critical' -DueDate $pastBase)
+    (New-VigilTask -Title 'future-critical'  -Priority 'critical' -DueDate (Get-Date).AddHours(4))
+)
+$sortedMix = @(Sort-VigilTasks -tasks $overdueMix -mode 'smart')
+Assert-Eq 'overdue-critical' $sortedMix[0].title 'Overdue beats future even at same priority'
+Assert-Eq 'overdue-low'      $sortedMix[1].title 'Within overdue, critical still beats low'
+Assert-Eq 'future-critical'  $sortedMix[2].title 'Future items come last'
+
+# --------------------------------------------------------------------------
+Section 'Edge cases - null-entry healing in Sort/Filter/Overdue'
+# --------------------------------------------------------------------------
+
+$withNulls = @($null, (New-VigilTask -Title 'survivor' -Priority 'normal'), $null)
+# Sort skips null entries (no throw)
+$sortedN = @(Sort-VigilTasks -tasks $withNulls -mode 'smart')
+Assert-True ($sortedN.Count -ge 1) 'Sort with null entries does not throw'
+
+# Filter with null entries
+$filteredN = @(Filter-VigilTasks -tasks $withNulls -mode 'all')
+Assert-True ($filteredN.Count -ge 1) 'Filter with null entries does not throw'
+
+# Overdue with null entries
+$overdueN = @(Get-VigilOverdueTasks -tasks $withNulls)
+Assert-Count 0 $overdueN 'Overdue ignores null entries'
+
+# Export with null entries
+$mdN = Export-VigilMarkdown -tasks $withNulls
+Assert-True ($mdN.Contains('survivor')) 'Export skips null entries but keeps real ones'
+
+# --------------------------------------------------------------------------
 # Cleanup
 # --------------------------------------------------------------------------
 

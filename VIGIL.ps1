@@ -13,7 +13,7 @@ param(
 
 # Build stamp - bumped on every commit. Visible in status bar + vigil.log.
 # Format: YYYY-MM-DD HH:MM (UTC)  buildN
-$script:VigilVersion = '2026-04-14 03:10 UTC  build32 test-ascii-bom'
+$script:VigilVersion = '2026-04-14 03:10 UTC  build33 phase5-features'
 
 $ErrorActionPreference = 'Stop'
 
@@ -259,6 +259,147 @@ function Save-VigilSettings($settings) {
         $m = 'Save-VigilSettings FAILED: {0}' -f $_.Exception.Message
         Write-VigilLog $m
     }
+}
+
+# --- Phase 5: Task mutation helpers (logic-only, testable cross-platform) ---
+# Each helper reloads from disk, mutates, atomic-saves, updates $Global:VigilTasks.
+# UI event handlers call these so the closures never mutate shared state directly.
+
+function Add-VigilTask($task) {
+    $cur = @(Load-VigilTasks)
+    $clean = @()
+    foreach ($t in $cur) { if ($null -ne $t -and $t.id) { $clean += $t } }
+    $clean += $task
+    Save-VigilTasks $clean
+    $Global:VigilTasks = $clean
+    return $task
+}
+
+function Remove-VigilTask([string]$id) {
+    $cur = @(Load-VigilTasks)
+    $new = @()
+    foreach ($t in $cur) {
+        if ($null -ne $t -and $t.id -and $t.id -ne $id) { $new += $t }
+    }
+    Save-VigilTasks $new
+    $Global:VigilTasks = $new
+    return ($new.Count -lt $cur.Count)
+}
+
+function Get-VigilTaskById([string]$id) {
+    $cur = @(Load-VigilTasks)
+    foreach ($t in $cur) {
+        if ($null -ne $t -and $t.id -eq $id) { return $t }
+    }
+    return $null
+}
+
+function Update-VigilTask {
+    param(
+        [string]$Id,
+        [string]$Title,
+        [string]$Priority,
+        [string]$DueDate,
+        [string]$Notes,
+        $Done
+    )
+    $cur = @(Load-VigilTasks)
+    $found = $false
+    foreach ($t in $cur) {
+        if ($null -eq $t -or $t.id -ne $Id) { continue }
+        $found = $true
+        if ($PSBoundParameters.ContainsKey('Title') -and $Title) {
+            $t.title = $Title
+        }
+        if ($PSBoundParameters.ContainsKey('Priority') -and $Priority) {
+            if (@('low','normal','high','critical') -contains $Priority) {
+                $t.priority = $Priority
+            }
+        }
+        if ($PSBoundParameters.ContainsKey('DueDate')) {
+            $t.dueDate = [string]$DueDate
+        }
+        if ($PSBoundParameters.ContainsKey('Notes')) {
+            $t.notes = [string]$Notes
+        }
+        if ($PSBoundParameters.ContainsKey('Done') -and $null -ne $Done) {
+            $t.done = [bool]$Done
+            if ($t.done) { $t.doneAt = (Get-Date).ToString('o') } else { $t.doneAt = '' }
+        }
+        break
+    }
+    if ($found) {
+        Save-VigilTasks $cur
+        $Global:VigilTasks = $cur
+    }
+    return $found
+}
+
+function Get-VigilOverdueTasks([object[]]$tasks) {
+    $now = Get-Date
+    $out = @()
+    foreach ($t in $tasks) {
+        if ($null -eq $t -or -not $t.id) { continue }
+        if ($t.done) { continue }
+        if (-not $t.dueDate) { continue }
+        try {
+            $d = [datetime]::Parse($t.dueDate)
+            if ($d -lt $now) { $out += $t }
+        } catch {}
+    }
+    return $out
+}
+
+function Export-VigilMarkdown([object[]]$tasks) {
+    $now = Get-Date
+    $sb = New-Object System.Text.StringBuilder
+    [void]$sb.AppendLine('# VIGIL Tasks')
+    [void]$sb.AppendLine('')
+    [void]$sb.AppendLine(('_Generated {0}_' -f $now.ToString('yyyy-MM-dd HH:mm')))
+    [void]$sb.AppendLine('')
+
+    $overdue = @(); $active = @(); $done = @()
+    foreach ($t in $tasks) {
+        if ($null -eq $t -or -not $t.id) { continue }
+        if ($t.done) { $done += $t; continue }
+        $isOverdue = $false
+        if ($t.dueDate) {
+            try { if ([datetime]::Parse($t.dueDate) -lt $now) { $isOverdue = $true } } catch {}
+        }
+        if ($isOverdue) { $overdue += $t } else { $active += $t }
+    }
+
+    if ($overdue.Count -gt 0) {
+        [void]$sb.AppendLine('## Overdue')
+        [void]$sb.AppendLine('')
+        foreach ($t in @(Sort-VigilTasks -tasks $overdue -mode 'priority')) {
+            $line = '- [ ] **{0}** ({1}) - {2}' -f $t.title, $t.priority, (Format-DueLabel $t.dueDate)
+            [void]$sb.AppendLine($line)
+        }
+        [void]$sb.AppendLine('')
+    }
+    if ($active.Count -gt 0) {
+        [void]$sb.AppendLine('## Active')
+        [void]$sb.AppendLine('')
+        foreach ($t in @(Sort-VigilTasks -tasks $active -mode 'smart')) {
+            $due = Format-DueLabel $t.dueDate
+            if ($due) {
+                $line = '- [ ] {0} ({1}) - {2}' -f $t.title, $t.priority, $due
+            } else {
+                $line = '- [ ] {0} ({1})' -f $t.title, $t.priority
+            }
+            [void]$sb.AppendLine($line)
+        }
+        [void]$sb.AppendLine('')
+    }
+    if ($done.Count -gt 0) {
+        [void]$sb.AppendLine('## Completed')
+        [void]$sb.AppendLine('')
+        foreach ($t in $done) {
+            [void]$sb.AppendLine(('- [x] {0}' -f $t.title))
+        }
+    }
+    return $sb.ToString()
 }
 
 # --- Phase 3: Outlook COM sync --------------------------------------------
@@ -987,6 +1128,26 @@ function Build-TaskCard($task) {
 
     $menu.Items.Add((New-Object System.Windows.Controls.Separator)) | Out-Null
 
+    $editTitleItem = New-Object System.Windows.Controls.MenuItem
+    $editTitleItem.Header = 'Edit title...'
+    $editTitleItem.Tag = @{ id = $task.id; action = 'edit-title' }
+    $editTitleItem.Add_Click({ param($s, $e) Handle-ContextAction $s.Tag })
+    $menu.Items.Add($editTitleItem) | Out-Null
+
+    $editNotesItem = New-Object System.Windows.Controls.MenuItem
+    $editNotesItem.Header = 'Edit notes...'
+    $editNotesItem.Tag = @{ id = $task.id; action = 'edit-notes' }
+    $editNotesItem.Add_Click({ param($s, $e) Handle-ContextAction $s.Tag })
+    $menu.Items.Add($editNotesItem) | Out-Null
+
+    $copyMdItem = New-Object System.Windows.Controls.MenuItem
+    $copyMdItem.Header = 'Copy as markdown'
+    $copyMdItem.Tag = @{ id = $task.id; action = 'copy-md' }
+    $copyMdItem.Add_Click({ param($s, $e) Handle-ContextAction $s.Tag })
+    $menu.Items.Add($copyMdItem) | Out-Null
+
+    $menu.Items.Add((New-Object System.Windows.Controls.Separator)) | Out-Null
+
     $delItem = New-Object System.Windows.Controls.MenuItem
     $delItem.Header = 'Delete'
     $delItem.Tag = @{ id = $task.id; action = 'delete' }
@@ -1069,17 +1230,131 @@ function Toggle-Done([string]$id, [bool]$done) {
 
 function Handle-ContextAction($tag) {
     $id = $tag.id; $action = $tag.action
-    if ($action -eq 'delete') {
-        $Global:VigilTasks = @($Global:VigilTasks | Where-Object { $_.id -ne $id })
-    } elseif ($action -eq 'priority') {
-        $t = $Global:VigilTasks | Where-Object { $_.id -eq $id }
-        if ($t) { $t.priority = $tag.value }
-    } elseif ($action -eq 'due') {
-        $t = $Global:VigilTasks | Where-Object { $_.id -eq $id }
-        if ($t) { $t.dueDate = $tag.value }
+    switch ($action) {
+        'delete'   { [void](Remove-VigilTask $id) }
+        'priority' { [void](Update-VigilTask -Id $id -Priority $tag.value) }
+        'due'      { [void](Update-VigilTask -Id $id -DueDate $tag.value) }
+        'edit-title' { Show-VigilEditPrompt -Id $id -Field 'title' }
+        'edit-notes' { Show-VigilEditPrompt -Id $id -Field 'notes' }
+        'copy-md'  {
+            $task = Get-VigilTaskById $id
+            if ($task) {
+                $md = Export-VigilMarkdown -tasks @($task)
+                try { [System.Windows.Clipboard]::SetText($md) } catch {}
+            }
+        }
     }
-    Save-VigilTasks $Global:VigilTasks
     Refresh-Render
+}
+
+$editPromptXaml = @'
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="VIGIL - Edit"
+        Width="440" SizeToContent="Height"
+        WindowStyle="None" ResizeMode="NoResize"
+        AllowsTransparency="True" Background="Transparent"
+        Topmost="True" ShowInTaskbar="False"
+        TextOptions.TextFormattingMode="Ideal"
+        TextOptions.TextRenderingMode="Grayscale"
+        UseLayoutRounding="True" SnapsToDevicePixels="True"
+        FontFamily="Segoe UI"
+        WindowStartupLocation="Manual">
+  <Border CornerRadius="16" Background="#0B0E14"
+          BorderBrush="#2A3245" BorderThickness="1" Margin="14">
+    <Border.Effect>
+      <DropShadowEffect Color="#000000" BlurRadius="40" ShadowDepth="0" Opacity="0.75"/>
+    </Border.Effect>
+    <StackPanel Margin="22,20,22,20">
+      <TextBlock x:Name="EditLabel" Text="Edit" FontSize="15" FontWeight="SemiBold"
+                 Foreground="#F0F2F7" Margin="0,0,0,12"/>
+      <Border Background="#1C2230" BorderBrush="#2A3245" BorderThickness="1" CornerRadius="8">
+        <TextBox x:Name="EditText" Background="Transparent" BorderThickness="0"
+                 Foreground="#F0F2F7" Padding="12,10" FontSize="14" MinHeight="40"
+                 TextWrapping="Wrap" AcceptsReturn="True"
+                 CaretBrush="#7C5CFF" VerticalContentAlignment="Top"/>
+      </Border>
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+        <Button x:Name="BtnEditCancel" Content="Cancel"
+                Background="Transparent" Foreground="#8A94A8" BorderThickness="0"
+                Padding="14,8" FontSize="12" Cursor="Hand"/>
+        <Button x:Name="BtnEditSave" Content="Save"
+                Background="#7C5CFF" Foreground="#FFFFFF" BorderThickness="0"
+                Padding="20,8" FontSize="12" FontWeight="SemiBold"
+                Margin="8,0,0,0" Cursor="Hand"/>
+      </StackPanel>
+    </StackPanel>
+  </Border>
+</Window>
+'@
+
+function Show-VigilEditPrompt {
+    param([string]$Id, [string]$Field)
+    try {
+        $task = Get-VigilTaskById $Id
+        if (-not $task) { return }
+        $prevFg = [VigilWin32]::GetForegroundWindow()
+
+        [xml]$ex = $editPromptXaml
+        $ereader = New-Object System.Xml.XmlNodeReader $ex
+        $ewin = [Windows.Markup.XamlReader]::Load($ereader)
+
+        $label = $ewin.FindName('EditLabel')
+        $text  = $ewin.FindName('EditText')
+        $btnS  = $ewin.FindName('BtnEditSave')
+        $btnC  = $ewin.FindName('BtnEditCancel')
+
+        if ($Field -eq 'title') {
+            $label.Text = 'Edit task title'
+            $text.Text = [string]$task.title
+            $text.AcceptsReturn = $false
+            $text.MinHeight = 20
+        } else {
+            $label.Text = 'Edit notes'
+            $text.Text = [string]$task.notes
+            $text.MinHeight = 80
+        }
+
+        $pt = [System.Windows.Forms.Cursor]::Position
+        $scr = [System.Windows.Forms.Screen]::FromPoint($pt).WorkingArea
+        $ewin.Left = $scr.X + (($scr.Width  - 440) / 2)
+        $ewin.Top  = $scr.Y + (($scr.Height - 240) / 2)
+
+        $saveFn = {
+            $v = $text.Text
+            if ($Field -eq 'title') {
+                if ($v) { $v = $v.Trim() }
+                if ($v) { [void](Update-VigilTask -Id $Id -Title $v) }
+            } else {
+                [void](Update-VigilTask -Id $Id -Notes ([string]$v))
+            }
+            Refresh-Render
+            $ewin.Close()
+        }.GetNewClosure()
+
+        $btnS.Add_Click($saveFn)
+        $btnC.Add_Click({ $ewin.Close() }.GetNewClosure())
+
+        $text.Add_KeyDown({
+            param($s, $e)
+            if ($e.Key -eq 'Escape') { $ewin.Close(); $e.Handled = $true; return }
+            if ($e.Key -eq 'Return' -and -not $text.AcceptsReturn) {
+                & $saveFn; $e.Handled = $true
+            }
+        }.GetNewClosure())
+
+        $ewin.Add_Closed({
+            if ($prevFg -ne [IntPtr]::Zero) { [VigilWin32]::SetForegroundWindow($prevFg) | Out-Null }
+        }.GetNewClosure())
+
+        $ewin.Show()
+        $ewin.Activate() | Out-Null
+        $text.Focus() | Out-Null
+        $text.SelectAll()
+    } catch {
+        $em = 'Show-VigilEditPrompt failed: ' + $_.Exception.Message
+        Write-VigilLog $em
+    }
 }
 
 # --- Event wiring ----------------------------------------------------------
@@ -1163,6 +1438,23 @@ foreach ($opt in $filterModes) {
     })
     $sortMenu.Items.Add($mi) | Out-Null
 }
+
+$sortMenu.Items.Add((New-Object System.Windows.Controls.Separator)) | Out-Null
+& $addHeader 'ACTIONS'
+
+$exportMi = New-Object System.Windows.Controls.MenuItem
+$exportMi.Header = 'Copy all as markdown'
+$exportMi.Add_Click({
+    try {
+        $md = Export-VigilMarkdown -tasks $Global:VigilTasks
+        [System.Windows.Clipboard]::SetText($md)
+        Write-VigilLog 'Markdown export copied to clipboard'
+    } catch {
+        $em = 'Export failed: ' + $_.Exception.Message
+        Write-VigilLog $em
+    }
+})
+$sortMenu.Items.Add($exportMi) | Out-Null
 
 $BtnSort.Add_Click({
     $sortMenu.PlacementTarget = $BtnSort
@@ -1475,6 +1767,92 @@ $window.Add_Closing({
 })
 
 Refresh-Render
+
+# --- Phase 5: System tray icon + overdue balloon (wrapped in functions ----
+# so [System.Drawing.*] resolves lazily at call time - Linux pwsh lacks
+# libgdiplus and cannot load System.Drawing.Gdip at script-parse time,
+# even behind an if-guard.
+
+function Install-VigilTrayIcon {
+    try {
+        $ni = New-Object System.Windows.Forms.NotifyIcon
+        $ni.Icon = [System.Drawing.SystemIcons]::Application
+        $ni.Visible = $true
+        $ni.Text = 'VIGIL'
+
+        $trayMenu = New-Object System.Windows.Forms.ContextMenuStrip
+        $miShow = $trayMenu.Items.Add('Show / Hide VIGIL')
+        $miShow.Add_Click({
+            if ($window.Visibility -eq 'Visible') { $window.Hide() }
+            else { $window.Show(); $window.Activate() | Out-Null }
+        })
+        $miSync = $trayMenu.Items.Add('Sync from Outlook')
+        $miSync.Add_Click({
+            try {
+                if (Test-OutlookAvailable) {
+                    [void](Sync-VigilFromOutlook)
+                    Refresh-Render
+                    $script:TrayIcon.ShowBalloonTip(2500, 'VIGIL', 'Sync complete', 'Info')
+                } else {
+                    $script:TrayIcon.ShowBalloonTip(2500, 'VIGIL', 'Outlook not running', 'Warning')
+                }
+            } catch {}
+        })
+        $miExport = $trayMenu.Items.Add('Copy all as markdown')
+        $miExport.Add_Click({
+            try {
+                $md = Export-VigilMarkdown -tasks $Global:VigilTasks
+                [System.Windows.Clipboard]::SetText($md)
+                $script:TrayIcon.ShowBalloonTip(2000, 'VIGIL', 'Tasks copied to clipboard', 'Info')
+            } catch {}
+        })
+        [void]$trayMenu.Items.Add('-')
+        $miExit = $trayMenu.Items.Add('Exit VIGIL')
+        $miExit.Add_Click({ $window.Close() })
+
+        $ni.ContextMenuStrip = $trayMenu
+        $ni.Add_MouseClick({
+            param($s, $e)
+            if ($e.Button -eq [System.Windows.Forms.MouseButtons]::Left) {
+                if ($window.Visibility -eq 'Visible') { $window.Hide() }
+                else { $window.Show(); $window.Activate() | Out-Null }
+            }
+        })
+
+        $script:TrayIcon = $ni
+        $window.Add_Closing({
+            if ($script:TrayIcon) {
+                $script:TrayIcon.Visible = $false
+                $script:TrayIcon.Dispose()
+            }
+        })
+    } catch {
+        $em = 'Tray icon setup failed: ' + $_.Exception.Message
+        Write-VigilLog $em
+    }
+}
+
+function Show-VigilOverdueBalloon {
+    try {
+        if (-not $script:TrayIcon) { return }
+        $overdue = @(Get-VigilOverdueTasks -tasks $Global:VigilTasks)
+        if ($overdue.Count -eq 0) { return }
+        $titleText = '{0} overdue task{1}' -f $overdue.Count, $(if ($overdue.Count -eq 1) { '' } else { 's' })
+        $bodyText = ''
+        $limit = [math]::Min(3, $overdue.Count)
+        for ($i = 0; $i -lt $limit; $i++) {
+            $bodyText += '- ' + $overdue[$i].title + "`n"
+        }
+        if ($overdue.Count -gt 3) {
+            $bodyText += ('+ {0} more' -f ($overdue.Count - 3))
+        }
+        $script:TrayIcon.ShowBalloonTip(5000, $titleText, $bodyText.TrimEnd(), 'Warning')
+    } catch {}
+}
+
+$script:TrayIcon = $null
+Install-VigilTrayIcon
+$window.Add_Loaded({ Show-VigilOverdueBalloon })
 
 # --- Phase 4: auto-start shortcut (first-run silent install) ---
 Install-VigilStartupShortcut
