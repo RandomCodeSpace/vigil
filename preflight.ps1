@@ -1,17 +1,33 @@
 # VIGIL Pre-Flight Checklist
 # Run on target Windows machine to verify environment before building VIGIL.
-# Usage:  powershell -ExecutionPolicy Bypass -File .\preflight.ps1
+# Usage:
+#   powershell -ExecutionPolicy Bypass -File .\preflight.ps1
+#   powershell -ExecutionPolicy Bypass -File .\preflight.ps1 -TenantId <guid>
+#
+# At the end of the run, a single compact result string is printed (line
+# starting with "VIGIL:v1:"). Copy ONLY that line back for remote triage —
+# it encodes pass/fail for every check as a bitmap.
+
+[CmdletBinding()]
+param(
+    [string]$TenantId = '',     # Optional: expected Azure AD tenant GUID
+    [switch]$Quiet               # Suppress per-check output, only emit result string
+)
 
 $ErrorActionPreference = 'Continue'
 $results = [ordered]@{}
+$script:CheckOrder = New-Object System.Collections.Generic.List[string]
 
 function Write-Check {
     param([string]$Name, [bool]$Ok, [string]$Detail = '')
     $status = if ($Ok) { '[ OK ]' } else { '[FAIL]' }
     $color  = if ($Ok) { 'Green' }  else { 'Red'   }
-    Write-Host ("{0} {1}" -f $status, $Name) -ForegroundColor $color
-    if ($Detail) { Write-Host "       $Detail" -ForegroundColor DarkGray }
+    if (-not $Quiet) {
+        Write-Host ("{0} {1}" -f $status, $Name) -ForegroundColor $color
+        if ($Detail) { Write-Host "       $Detail" -ForegroundColor DarkGray }
+    }
     $script:results[$Name] = [pscustomobject]@{ Ok = $Ok; Detail = $Detail }
+    [void]$script:CheckOrder.Add($Name)
 }
 
 Write-Host ""
@@ -354,15 +370,177 @@ try {
     Write-Check 'Monospace font available (Cascadia/Consolas)' $false $_.Exception.Message
 }
 
-# Summary
+# --- Environment / Azure AD / identity checks ---
+
+# 26. Machine Azure AD / Hybrid join state via dsregcmd (local, no network)
+$script:DetectedTenantId = ''
+try {
+    $dsreg = & dsregcmd /status 2>$null | Out-String
+    $aadJoined = ($dsreg -match 'AzureAdJoined\s*:\s*YES')
+    $domJoined = ($dsreg -match 'DomainJoined\s*:\s*YES')
+    if ($dsreg -match 'TenantId\s*:\s*([0-9a-fA-F\-]{36})') { $script:DetectedTenantId = $Matches[1] }
+    $kind = @()
+    if ($aadJoined) { $kind += 'AzureAD' }
+    if ($domJoined) { $kind += 'Domain'  }
+    if (-not $kind)  { $kind += 'Workgroup' }
+    $detail = "Join = $($kind -join '+')"
+    if ($script:DetectedTenantId) { $detail += "  TenantId = $script:DetectedTenantId" }
+    Write-Check 'Device join state (dsregcmd)' $true $detail
+} catch {
+    Write-Check 'Device join state (dsregcmd)' $false $_.Exception.Message
+}
+
+# 27. Tenant ID matches expected (only runs if -TenantId was passed)
+try {
+    if ([string]::IsNullOrWhiteSpace($TenantId)) {
+        Write-Check 'Tenant ID matches expected' $true 'No -TenantId supplied — skipped'
+    } else {
+        $match = ($script:DetectedTenantId -and
+                  ($script:DetectedTenantId.ToLower() -eq $TenantId.ToLower()))
+        $detail = "Expected $TenantId, got $script:DetectedTenantId"
+        Write-Check 'Tenant ID matches expected' $match $detail
+    }
+} catch {
+    Write-Check 'Tenant ID matches expected' $false $_.Exception.Message
+}
+
+# 28. Outlook profile is configured for a mailbox (MAPI store present)
+try {
+    $ol  = New-Object -ComObject Outlook.Application -ErrorAction Stop
+    $ns  = $ol.GetNamespace('MAPI')
+    $stores = $ns.Stores
+    $count = 0
+    foreach ($s in $stores) { $count++; [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($s) }
+    [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($stores)
+    [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($ns)
+    [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($ol)
+    [GC]::Collect(); [GC]::WaitForPendingFinalizers()
+    Write-Check 'Outlook profile has at least one mail store' ($count -ge 1) "$count store(s)"
+} catch {
+    Write-Check 'Outlook profile has at least one mail store' $false $_.Exception.Message
+}
+
+# 29. .NET Framework >= 4.7.2 (WPF transparency + backdrop features)
+try {
+    $release = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full' -ErrorAction Stop).Release
+    $ok = ($release -ge 461808)
+    Write-Check '.NET Framework >= 4.7.2' $ok "Release key = $release"
+} catch {
+    Write-Check '.NET Framework >= 4.7.2' $false $_.Exception.Message
+}
+
+# 30. Task Scheduler COM (Schedule.Service) — fallback for auto-start if
+#     Startup folder .lnk is blocked by GPO.
+try {
+    $sch = New-Object -ComObject Schedule.Service -ErrorAction Stop
+    $sch.Connect()
+    [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($sch)
+    Write-Check 'Task Scheduler COM (Schedule.Service)' $true 'Fallback auto-start path'
+} catch {
+    Write-Check 'Task Scheduler COM (Schedule.Service)' $false $_.Exception.Message
+}
+
+# 31. BitLocker on system drive (signals whether plaintext tasks.json is acceptable)
+try {
+    $vol = Get-CimInstance -Namespace 'root/cimv2/security/microsoftvolumeencryption' `
+                           -ClassName Win32_EncryptableVolume `
+                           -Filter "DriveLetter='$env:SystemDrive'" -ErrorAction Stop
+    $on = ($null -ne $vol -and $vol.ProtectionStatus -eq 1)
+    Write-Check 'BitLocker on system drive' $on 'If off, consider DPAPI encryption of tasks.json'
+} catch {
+    Write-Check 'BitLocker on system drive' $false $_.Exception.Message
+}
+
+# 32. Windows Firewall profile (informational — VIGIL makes no network calls
+#     so blocked outbound is fine, but we record the state for triage).
+try {
+    $fw = Get-NetFirewallProfile -ErrorAction Stop | Select-Object Name,Enabled
+    $active = ($fw | Where-Object { $_.Enabled -eq $true } | ForEach-Object Name) -join ','
+    Write-Check 'Windows Firewall enabled profiles' $true "Active: $active"
+} catch {
+    # Older Win10 builds or restricted shells may lack Get-NetFirewallProfile
+    Write-Check 'Windows Firewall enabled profiles' $true 'Get-NetFirewallProfile unavailable — skipped'
+}
+
+# 33. Proxy configuration (informational — zero-network app, but useful triage)
+try {
+    $proxy = [System.Net.WebRequest]::DefaultWebProxy
+    $viaProxy = $proxy.GetProxy('https://login.microsoftonline.com').AbsoluteUri
+    Write-Check 'System proxy visible' $true "Resolved: $viaProxy"
+} catch {
+    Write-Check 'System proxy visible' $true 'No proxy resolver — direct connection assumed'
+}
+
+# 34. Microsoft.Graph PowerShell module (informational — NOT required by VIGIL,
+#     but if present tells us Graph fallback is feasible in Phase 5).
+try {
+    $graph = Get-Module -ListAvailable -Name Microsoft.Graph* | Select-Object -First 1
+    $ok = $null -ne $graph
+    $detail = if ($ok) { "Microsoft.Graph $($graph.Version) installed (Phase 5 option)" }
+              else     { 'Not installed — Phase 5 Graph fallback would need IT approval' }
+    Write-Check 'Microsoft.Graph module (informational)' $true $detail
+} catch {
+    Write-Check 'Microsoft.Graph module (informational)' $true $_.Exception.Message
+}
+
+# 35. Script running as non-admin (VIGIL must not need elevation)
+try {
+    $id  = [System.Security.Principal.WindowsIdentity]::GetCurrent()
+    $pri = New-Object System.Security.Principal.WindowsPrincipal($id)
+    $isAdmin = $pri.IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)
+    Write-Check 'Running as non-admin (as intended)' (-not $isAdmin) "IsAdmin = $isAdmin"
+} catch {
+    Write-Check 'Running as non-admin (as intended)' $false $_.Exception.Message
+}
+
+# --- Summary + compact result string ---
+
 $total  = $results.Count
 $passed = ($results.Values | Where-Object { $_.Ok }).Count
-Write-Host ""
-Write-Host ("Result: {0}/{1} checks passed" -f $passed, $total) -ForegroundColor Cyan
-if ($passed -eq $total) {
-    Write-Host "Ready to build VIGIL." -ForegroundColor Green
-    exit 0
-} else {
-    Write-Host "Resolve failing checks before building." -ForegroundColor Yellow
-    exit 1
+$failed = $total - $passed
+
+if (-not $Quiet) {
+    Write-Host ""
+    Write-Host ("Result: {0}/{1} checks passed" -f $passed, $total) -ForegroundColor Cyan
+    if ($failed -gt 0) {
+        Write-Host ""
+        Write-Host "Failed checks:" -ForegroundColor Yellow
+        $i = 0
+        foreach ($name in $script:CheckOrder) {
+            $i++
+            if (-not $results[$name].Ok) {
+                Write-Host ("  #{0,-3} {1}" -f $i, $name) -ForegroundColor Red
+            }
+        }
+    }
 }
+
+# Build compact result string.
+#   Format: VIGIL:v1:<count>:<hexBitmap>:P<pass>:F<fail>:T<tenantTag>
+#   Bitmap: bit 0 (LSB) = check #1, bit N-1 = check #N. 1 = pass, 0 = fail.
+#   tenantTag: "none" | "match" | "mismatch" | "unknown" (for quick triage)
+$bits = [System.Numerics.BigInteger]::Zero
+for ($idx = 0; $idx -lt $script:CheckOrder.Count; $idx++) {
+    if ($results[$script:CheckOrder[$idx]].Ok) {
+        $bits = $bits -bor ([System.Numerics.BigInteger]::One -shl $idx)
+    }
+}
+# BigInteger.ToString('X') may add a leading 0 for sign-safety; strip it.
+$hex = $bits.ToString('X').TrimStart('0')
+if (-not $hex) { $hex = '0' }
+
+$tenantTag = 'none'
+if ($TenantId) {
+    if ($results['Tenant ID matches expected'].Ok) { $tenantTag = 'match' }
+    else                                            { $tenantTag = 'mismatch' }
+} elseif ($script:DetectedTenantId) {
+    $tenantTag = 'detected'
+}
+
+$resultString = "VIGIL:v1:{0}:{1}:P{2}:F{3}:T{4}" -f $total, $hex, $passed, $failed, $tenantTag
+
+Write-Host ""
+Write-Host "Paste this single line back for remote triage:" -ForegroundColor Cyan
+Write-Host $resultString -ForegroundColor White
+
+if ($passed -eq $total) { exit 0 } else { exit 1 }
