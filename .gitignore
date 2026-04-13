@@ -1,0 +1,52 @@
+# VIGIL runtime data (never commit user task data)
+.vigil/
+tasks.json
+tasks.backup.json
+tasks.tmp.json
+settings.json
+vigil.log
+*.log
+
+# PowerShell
+*.ps1.bak
+*.psd1.bak
+PSScriptAnalyzerSettings.psd1.local
+
+# Pester test artifacts
+TestResults.xml
+coverage.xml
+.pester/
+
+# Windows cruft
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# Editor / IDE
+.vs/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+*.suo
+*.user
+.idea/
+
+# OS
+.DS_Store
+*.swp
+*~
+
+# Build / packaging
+dist/
+out/
+*.zip
+*.nupkg
+
+# Secrets (paranoia)
+*.pfx
+*.snk
+secrets.json
+.env
+.env.*
