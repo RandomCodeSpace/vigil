@@ -197,8 +197,10 @@ function Sort-VigilTasks([object[]]$tasks) {
         $overdue = 1
         if (($due -lt $now) -and (-not $t.done)) { $overdue = 0 }
         $prank = 9
-        if ($script:PriorityRank.ContainsKey($t.priority)) {
-            $prank = $script:PriorityRank[$t.priority]
+        $pkey = 'normal'
+        if ($t.priority) { $pkey = [string]$t.priority }
+        if ($script:PriorityRank.ContainsKey($pkey)) {
+            $prank = $script:PriorityRank[$pkey]
         }
         [pscustomobject]@{
             _task     = $t
