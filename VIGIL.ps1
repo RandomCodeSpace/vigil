@@ -13,7 +13,7 @@ param(
 
 # Build stamp - bumped on every commit. Visible in status bar + vigil.log.
 # Format: YYYY-MM-DD HH:MM (UTC)  buildN
-$script:VigilVersion = '2026-04-13 16:15 UTC  build65 badge-click-tunnel'
+$script:VigilVersion = '2026-04-13 16:30 UTC  build66 sync-fix-taskbar-icon'
 
 $ErrorActionPreference = 'Stop'
 
@@ -43,6 +43,8 @@ public class VigilWin32 {
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
     [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
     [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    public static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
 }
 "@
 }
@@ -507,12 +509,12 @@ function Sync-VigilFromOutlook {
     $ol = $null; $ns = $null
     $added = 0; $completed = 0
     try {
-        try { $ol = [System.Runtime.InteropServices.Marshal]::GetActiveObject('Outlook.Application') }
-        catch {
-            if ($Global:VigilSettings.outlookSync) {
-                $ol = New-Object -ComObject Outlook.Application
-            } else {
-                Write-VigilLog 'Outlook not running - sync skipped'
+        # Try to attach to running Outlook first (GetActiveObject is unreliable on .NET 9,
+        # so always fall through to New-Object regardless of the outlookSync setting).
+        try { $ol = [System.Runtime.InteropServices.Marshal]::GetActiveObject('Outlook.Application') } catch { $ol = $null }
+        if (-not $ol) {
+            try { $ol = New-Object -ComObject Outlook.Application } catch {
+                Write-VigilLog ('Outlook COM unavailable: ' + $_.Exception.Message)
                 return $false
             }
         }
@@ -2249,12 +2251,28 @@ function Show-VigilOverdueBalloon {
 
 $script:TrayIcon = $null
 # Window taskbar icon (matches the system tray icon - both drawn from
-# New-VigilIconBitmap so the brand mark is consistent)
-try {
-    $window.Icon = New-VigilWpfIcon
-} catch {
-    Write-VigilLog ('Window icon set failed: ' + $_.Exception.Message)
-}
+# New-VigilIconBitmap so the brand mark is consistent).
+# For WindowStyle="None" chromeless windows, Window.Icon must be assigned
+# after the HWND exists (SourceInitialized), otherwise the taskbar button
+# keeps the default WPF icon.
+try { $window.Icon = New-VigilWpfIcon } catch { Write-VigilLog ('Window icon set failed: ' + $_.Exception.Message) }
+$window.Add_SourceInitialized({
+    try { $window.Icon = New-VigilWpfIcon } catch {}
+    # WPF with WindowStyle="None" often does not push Window.Icon to the
+    # native HWND's class icon, so the taskbar falls back to a generic icon.
+    # Force it via WM_SETICON (both small and big).
+    try {
+        $hwnd = (New-Object System.Windows.Interop.WindowInteropHelper($window)).Handle
+        if ($hwnd -and $hwnd -ne [IntPtr]::Zero) {
+            $ico = New-VigilWinFormsIcon
+            $h   = $ico.Handle
+            [void][VigilWin32]::SendMessage($hwnd, 0x80, [IntPtr]0, $h)  # WM_SETICON ICON_SMALL
+            [void][VigilWin32]::SendMessage($hwnd, 0x80, [IntPtr]1, $h)  # WM_SETICON ICON_BIG
+        }
+    } catch {
+        Write-VigilLog ('WM_SETICON failed: ' + $_.Exception.Message)
+    }
+})
 
 Install-VigilTrayIcon
 $window.Add_Loaded({ Show-VigilOverdueBalloon })
