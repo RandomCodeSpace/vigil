@@ -13,7 +13,7 @@ param(
 
 # Build stamp - bumped on every commit. Visible in status bar + vigil.log.
 # Format: YYYY-MM-DD HH:MM (UTC)  buildN
-$script:VigilVersion = '2026-04-14 03:10 UTC  build51 close-in-context-menu'
+$script:VigilVersion = '2026-04-14 03:10 UTC  build52 export-no-calendar'
 
 $ErrorActionPreference = 'Stop'
 
@@ -390,7 +390,11 @@ function Get-VigilOverdueTasks([object[]]$tasks) {
     return $out
 }
 
-function Export-VigilMarkdown([object[]]$tasks) {
+function Export-VigilMarkdown {
+    param(
+        [object[]]$tasks,
+        [switch]$IncludeCalendar
+    )
     $now = Get-Date
     $sb = New-Object System.Text.StringBuilder
     [void]$sb.AppendLine('# VIGIL Tasks')
@@ -401,6 +405,9 @@ function Export-VigilMarkdown([object[]]$tasks) {
     $overdue = @(); $active = @(); $done = @()
     foreach ($t in $tasks) {
         if ($null -eq $t -or -not $t.id) { continue }
+        # Calendar items are excluded from markdown export by default - they
+        # are meeting reminders, not actionable work the user wants in a list.
+        if (-not $IncludeCalendar -and $t.source -eq 'outlook-cal') { continue }
         if ($t.done) { $done += $t; continue }
         $isOverdue = $false
         if ($t.dueDate) {

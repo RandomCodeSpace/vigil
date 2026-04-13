@@ -330,6 +330,29 @@ Assert-True ($md.Contains('- [x] done-task'))   'done task uses [x] checkbox'
 Assert-True ($md.Contains('- [ ] active-high')) 'active task uses [ ] checkbox'
 
 # --------------------------------------------------------------------------
+Section 'Export-VigilMarkdown - calendar exclusion'
+# --------------------------------------------------------------------------
+
+$mixedExport = @(
+    (New-VigilTask -Title 'manual-thing' -Priority 'normal' -Source 'manual')
+    (New-VigilTask -Title 'standup-meeting' -Priority 'high' -Source 'outlook-cal' -DueDate (Get-Date).AddHours(2))
+    (New-VigilTask -Title 'flagged-email-followup' -Priority 'normal' -Source 'outlook-flag')
+    (New-VigilTask -Title 'outlook-task-thing' -Priority 'normal' -Source 'outlook-task')
+)
+
+# Default: calendar excluded
+$mdDefault = Export-VigilMarkdown -tasks $mixedExport
+Assert-True (-not $mdDefault.Contains('standup-meeting')) 'default export skips outlook-cal items'
+Assert-True ($mdDefault.Contains('manual-thing'))         'default export keeps manual'
+Assert-True ($mdDefault.Contains('flagged-email-followup')) 'default export keeps outlook-flag'
+Assert-True ($mdDefault.Contains('outlook-task-thing'))   'default export keeps outlook-task'
+
+# With -IncludeCalendar: calendar included
+$mdWithCal = Export-VigilMarkdown -tasks $mixedExport -IncludeCalendar
+Assert-True ($mdWithCal.Contains('standup-meeting'))     '-IncludeCalendar restores outlook-cal items'
+Assert-True ($mdWithCal.Contains('manual-thing'))        '-IncludeCalendar still keeps manual'
+
+# --------------------------------------------------------------------------
 Section 'Search-VigilTasks - text search'
 # --------------------------------------------------------------------------
 
