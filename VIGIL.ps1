@@ -12,7 +12,7 @@ param()
 
 # Build stamp - bumped on every commit. Visible in status bar + vigil.log.
 # Format: YYYY-MM-DD HH:MM (UTC)  buildN
-$script:VigilVersion = '2026-04-14 02:30 UTC  build27 phase3-outlook-sync'
+$script:VigilVersion = '2026-04-14 02:30 UTC  build28 ascii-sweep'
 
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName PresentationFramework
@@ -1347,7 +1347,7 @@ function Show-QuickAdd {
             $txtTitle.SelectAll()
         }
 
-        # Save action — wrapped in try/catch so validation failures never
+        # Save action - wrapped in try/catch so validation failures never
         # propagate to the dispatcher (which would crash $window.ShowDialog).
         $saveAction = {
             try {
@@ -1408,7 +1408,7 @@ function Show-QuickAdd {
 
 $script:HotkeyRegistered = $false
 
-# Subscribe to the C# event — plain Action delegate, no ref-param cast needed
+# Subscribe to the C# event - plain Action delegate, no ref-param cast needed
 [VigilHotkey]::add_HotkeyPressed({
     try { Show-QuickAdd } catch {
         $em = 'Hotkey handler error: ' + $_.Exception.Message
