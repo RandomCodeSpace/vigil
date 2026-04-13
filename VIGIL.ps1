@@ -12,7 +12,7 @@ param()
 
 # Build stamp - bumped on every commit. Visible in status bar + vigil.log.
 # Format: YYYY-MM-DD HH:MM (UTC)  buildN
-$script:VigilVersion = '2026-04-14 00:15 UTC  build24 hotkey-csharp-bridge'
+$script:VigilVersion = '2026-04-14 00:45 UTC  build25 quickadd-state-hashtable'
 
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName PresentationFramework
@@ -906,41 +906,6 @@ $quickAddXaml = @'
 </Window>
 '@
 
-$script:QuickAddPriority = 'normal'
-$script:QuickAddDue      = ''
-$script:QuickAddPriBtns  = $null
-$script:QuickAddDueBtns  = $null
-
-function Update-QuickAddVisuals {
-    $accent  = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromRgb(124,92,255))
-    $elev    = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromRgb(28,34,48))
-    $txt     = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromRgb(240,242,247))
-    $txtDim  = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromRgb(138,148,168))
-    $bColor  = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromRgb(42,50,69))
-
-    if ($script:QuickAddPriBtns) {
-        foreach ($p in $script:QuickAddPriBtns.Keys) {
-            $b = $script:QuickAddPriBtns[$p]
-            if ($p -eq $script:QuickAddPriority) {
-                $b.Background = $accent; $b.Foreground = $txt; $b.BorderBrush = $accent
-            } else {
-                $b.Background = $elev; $b.Foreground = $txtDim; $b.BorderBrush = $bColor
-            }
-        }
-    }
-    if ($script:QuickAddDueBtns) {
-        foreach ($k in $script:QuickAddDueBtns.Keys) {
-            $b = $script:QuickAddDueBtns[$k]
-            $matchTag = ($b.Tag -eq $script:QuickAddDue)
-            if ($matchTag) {
-                $b.Background = $accent; $b.Foreground = $txt; $b.BorderBrush = $accent
-            } else {
-                $b.Background = $elev; $b.Foreground = $txtDim; $b.BorderBrush = $bColor
-            }
-        }
-    }
-}
-
 function Show-QuickAdd {
     try {
         $prevFg = [VigilWin32]::GetForegroundWindow()
@@ -962,10 +927,40 @@ function Show-QuickAdd {
         $btnSave   = $qwin.FindName('BtnQSave')
         $btnCancel = $qwin.FindName('BtnQCancel')
 
-        $script:QuickAddPriority = 'normal'
-        $script:QuickAddDue      = ''
-        $script:QuickAddPriBtns  = @{}
-        $script:QuickAddDueBtns  = @{}
+        # Shared state via hashtable captured by closures.
+        # PS $script: scope doesn't reliably cross WPF event handler boundaries,
+        # but hashtable references passed through .GetNewClosure() always do.
+        $state = @{
+            priority = 'normal'
+            due      = ''
+            priBtns  = @{}
+            dueBtns  = @{}
+        }
+
+        # Repaint closure reads $state.priority/due and recolors all pills.
+        $repaint = {
+            $accent  = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromRgb(124,92,255))
+            $elev    = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromRgb(28,34,48))
+            $txt     = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromRgb(240,242,247))
+            $txtDim  = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromRgb(138,148,168))
+            $bColor  = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromRgb(42,50,69))
+            foreach ($pk in @($state.priBtns.Keys)) {
+                $b = $state.priBtns[$pk]
+                if ($pk -eq $state.priority) {
+                    $b.Background = $accent; $b.Foreground = $txt; $b.BorderBrush = $accent
+                } else {
+                    $b.Background = $elev; $b.Foreground = $txtDim; $b.BorderBrush = $bColor
+                }
+            }
+            foreach ($dk in @($state.dueBtns.Keys)) {
+                $b = $state.dueBtns[$dk]
+                if ([string]$b.Tag -eq [string]$state.due) {
+                    $b.Background = $accent; $b.Foreground = $txt; $b.BorderBrush = $accent
+                } else {
+                    $b.Background = $elev; $b.Foreground = $txtDim; $b.BorderBrush = $bColor
+                }
+            }
+        }.GetNewClosure()
 
         # Priority pills
         foreach ($p in @('low','normal','high','critical')) {
@@ -978,11 +973,11 @@ function Show-QuickAdd {
             $btn.Cursor = [System.Windows.Input.Cursors]::Hand
             $btn.Tag = $p
             $btn.Add_Click({
-                param($sender, $e)
-                $script:QuickAddPriority = [string]$sender.Tag
-                Update-QuickAddVisuals
-            })
-            $script:QuickAddPriBtns[$p] = $btn
+                param($s, $e)
+                $state.priority = [string]$s.Tag
+                & $repaint
+            }.GetNewClosure())
+            $state.priBtns[$p] = $btn
             [void]$priRow.Children.Add($btn)
         }
 
@@ -1006,15 +1001,15 @@ function Show-QuickAdd {
             $btn.Cursor = [System.Windows.Input.Cursors]::Hand
             $btn.Tag = $d.key
             $btn.Add_Click({
-                param($sender, $e)
-                $script:QuickAddDue = [string]$sender.Tag
-                Update-QuickAddVisuals
-            })
-            $script:QuickAddDueBtns[$d.label] = $btn
+                param($s, $e)
+                $state.due = [string]$s.Tag
+                & $repaint
+            }.GetNewClosure())
+            $state.dueBtns[$d.label] = $btn
             [void]$dueRow.Children.Add($btn)
         }
 
-        Update-QuickAddVisuals
+        & $repaint
 
         # Position on active monitor
         $pt = [System.Windows.Forms.Cursor]::Position
@@ -1027,16 +1022,25 @@ function Show-QuickAdd {
             $txtTitle.SelectAll()
         }
 
+        # Save action — wrapped in try/catch so validation failures never
+        # propagate to the dispatcher (which would crash $window.ShowDialog).
         $saveAction = {
-            $t = $txtTitle.Text
-            if ($t) { $t = $t.Trim() }
-            if (-not $t) { return }
-            $task = New-VigilTask -Title $t -Priority $script:QuickAddPriority
-            if ($script:QuickAddDue) { $task.dueDate = $script:QuickAddDue }
-            $script:Tasks = @($script:Tasks) + @($task)
-            Save-VigilTasks $script:Tasks
-            Refresh-Render
-            $qwin.Close()
+            try {
+                $t = $txtTitle.Text
+                if ($t) { $t = $t.Trim() }
+                if (-not $t) { return }
+                $pri = [string]$state.priority
+                if ([string]::IsNullOrEmpty($pri)) { $pri = 'normal' }
+                $task = New-VigilTask -Title $t -Priority $pri
+                if ($state.due) { $task.dueDate = [string]$state.due }
+                $script:Tasks = @($script:Tasks) + @($task)
+                Save-VigilTasks $script:Tasks
+                Refresh-Render
+                $qwin.Close()
+            } catch {
+                $em = 'QuickAdd save failed: ' + $_.Exception.Message
+                Write-VigilLog $em
+            }
         }.GetNewClosure()
 
         $btnSave.Add_Click($saveAction)
