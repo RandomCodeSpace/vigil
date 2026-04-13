@@ -1,4 +1,4 @@
-#!/usr/bin/env pwsh
+﻿#!/usr/bin/env pwsh
 # VIGIL core logic smoke tests.
 # Runs on Windows PowerShell 5.1 AND cross-platform pwsh 6+.
 # Exercises: task schema, sort modes, filter modes, JSON round-trip,
@@ -8,8 +8,6 @@
 #   pwsh -File Test-Vigil.ps1
 #   powershell -File Test-Vigil.ps1
 
-[CmdletBinding()]
-param()
 
 $ErrorActionPreference = 'Stop'
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -20,7 +18,7 @@ if (-not (Test-Path $vigilPath)) {
     exit 1
 }
 
-# Dot-source VIGIL in NoUI mode — defines all core functions, returns before UI
+# Dot-source VIGIL in NoUI mode - defines all core functions, returns before UI
 . $vigilPath -NoUI
 
 $script:Passed = 0
@@ -80,7 +78,7 @@ $t2 = New-VigilTask -Title 'With due' -Priority 'critical' -DueDate ([datetime]'
 Assert-True ($t2.dueDate -match '2026-12-25') 'dueDate set via param'
 
 # --------------------------------------------------------------------------
-Section 'Sort-VigilTasks — smart mode'
+Section 'Sort-VigilTasks - smart mode'
 # --------------------------------------------------------------------------
 
 $tasks = @(
@@ -96,7 +94,7 @@ Assert-Eq 'normal' $sorted[2].title 'normal third'
 Assert-Eq 'low'    $sorted[3].title 'low last'
 
 # --------------------------------------------------------------------------
-Section 'Sort-VigilTasks — due date mode (overdue floats to top)'
+Section 'Sort-VigilTasks - due date mode (overdue floats to top)'
 # --------------------------------------------------------------------------
 
 $yesterday = (Get-Date).AddDays(-1)
@@ -114,7 +112,7 @@ Assert-Eq 'tomorrow'  $sortedDue[1].title 'tomorrow second'
 Assert-Eq 'next-week' $sortedDue[2].title 'next-week last'
 
 # --------------------------------------------------------------------------
-Section 'Sort-VigilTasks — newest first'
+Section 'Sort-VigilTasks - newest first'
 # --------------------------------------------------------------------------
 
 Start-Sleep -Milliseconds 20
@@ -128,7 +126,7 @@ Assert-Eq 'new' $sortedNew[0].title 'newest first in added mode'
 Assert-Eq 'old' $sortedNew[2].title 'oldest last in added mode'
 
 # --------------------------------------------------------------------------
-Section 'Sort-VigilTasks — null priority safety'
+Section 'Sort-VigilTasks - null priority safety'
 # --------------------------------------------------------------------------
 
 $badTask = New-VigilTask -Title 'bad' -Priority 'normal'
