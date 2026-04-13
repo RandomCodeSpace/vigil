@@ -13,7 +13,7 @@ param(
 
 # Build stamp - bumped on every commit. Visible in status bar + vigil.log.
 # Format: YYYY-MM-DD HH:MM (UTC)  buildN
-$script:VigilVersion = '2026-04-14 03:10 UTC  build37 fluent-diag'
+$script:VigilVersion = '2026-04-14 03:10 UTC  build38 prefer-pwsh7'
 
 $ErrorActionPreference = 'Stop'
 
@@ -642,6 +642,27 @@ function Sync-VigilFromOutlook {
 
 # --- Phase 4: Auto-start shortcut + filter helpers -------------------------
 
+function Find-VigilPwshExe {
+    # Prefer pwsh 7.x over Windows PowerShell 5.1 for Fluent support.
+    $candidates = @()
+    if ($env:ProgramFiles) {
+        $candidates += (Join-Path $env:ProgramFiles 'PowerShell\7\pwsh.exe')
+    }
+    $pf86 = [Environment]::GetEnvironmentVariable('ProgramFiles(x86)')
+    if ($pf86) { $candidates += (Join-Path $pf86 'PowerShell\7\pwsh.exe') }
+    if ($env:LOCALAPPDATA) {
+        $candidates += (Join-Path $env:LOCALAPPDATA 'Microsoft\PowerShell\7\pwsh.exe')
+    }
+    foreach ($c in $candidates) {
+        if ($c -and (Test-Path $c)) { return $c }
+    }
+    try {
+        $cmd = Get-Command pwsh -ErrorAction SilentlyContinue
+        if ($cmd -and $cmd.Source) { return $cmd.Source }
+    } catch {}
+    return $null
+}
+
 function Install-VigilStartupShortcut {
     if (-not $script:IsWindowsHost) { return }
     try {
@@ -649,10 +670,13 @@ function Install-VigilStartupShortcut {
         $startupDir = [Environment]::GetFolderPath('Startup')
         if (-not (Test-Path $startupDir)) { return }
         $lnkPath = Join-Path $startupDir 'VIGIL.lnk'
+        # Prefer pwsh 7.x; fall back to Windows PowerShell 5.1 if not installed.
+        $launcher = Find-VigilPwshExe
+        if (-not $launcher) { $launcher = Join-Path $PSHOME 'powershell.exe' }
         $wsh = New-Object -ComObject WScript.Shell
         try {
             $shortcut = $wsh.CreateShortcut($lnkPath)
-            $shortcut.TargetPath = (Join-Path $PSHOME 'powershell.exe')
+            $shortcut.TargetPath = $launcher
             $scriptPath = $PSCommandPath
             if (-not $scriptPath) { $scriptPath = $MyInvocation.MyCommand.Path }
             $shortcut.Arguments = '-ExecutionPolicy Bypass -WindowStyle Hidden -File "' + $scriptPath + '"'
@@ -665,7 +689,7 @@ function Install-VigilStartupShortcut {
         }
         $Global:VigilSettings.autoStartInstalled = $true
         Save-VigilSettings $Global:VigilSettings
-        Write-VigilLog 'Startup shortcut installed'
+        Write-VigilLog ('Startup shortcut installed: ' + $launcher)
     } catch {
         $em = 'Startup shortcut install failed: ' + $_.Exception.Message
         Write-VigilLog $em
@@ -1542,6 +1566,16 @@ $window.Add_Closing({
 # --- Go --------------------------------------------------------------------
 $startMsg = 'VIGIL started. version={0}  tasks={1}' -f $script:VigilVersion, $Global:VigilTasks.Count
 Write-VigilLog $startMsg
+$hostMsg = 'Host: ps={0}.{1} net={2}.{3}' -f $PSVersionTable.PSVersion.Major, $PSVersionTable.PSVersion.Minor, [Environment]::Version.Major, [Environment]::Version.Minor
+Write-VigilLog $hostMsg
+# If running under Windows PowerShell 5.1 but pwsh 7.x is available, warn
+if ($script:IsWindowsHost -and $PSVersionTable.PSVersion.Major -eq 5) {
+    $pwshExe = Find-VigilPwshExe
+    if ($pwshExe) {
+        $warn = 'WARN: VIGIL is running on Windows PowerShell 5.1. Fluent/Mica requires pwsh 7.5+. Relaunch via: ' + $pwshExe
+        Write-VigilLog $warn
+    }
+}
 
 # --- Phase 2: Quick-Add popup + global hotkey -----------------------------
 
