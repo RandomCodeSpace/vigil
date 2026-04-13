@@ -13,7 +13,7 @@ param(
 
 # Build stamp - bumped on every commit. Visible in status bar + vigil.log.
 # Format: YYYY-MM-DD HH:MM (UTC)  buildN
-$script:VigilVersion = '2026-04-14 03:10 UTC  build42 mica-see-through-chrome'
+$script:VigilVersion = '2026-04-14 03:10 UTC  build43 fluent-everywhere'
 
 $ErrorActionPreference = 'Stop'
 
@@ -655,6 +655,26 @@ function Sync-VigilFromOutlook {
 }
 
 # --- Phase 4: Auto-start shortcut + filter helpers -------------------------
+
+function Apply-VigilFluentBackdrop($targetWindow, [int]$backdropType = 2) {
+    # Helper: apply Mica (2 = MainWindow) or Acrylic (3 = TransientWindow)
+    # backdrop to any WPF window. Safe no-op if Fluent not supported.
+    if (-not $script:HasFluent) { return }
+    try {
+        $h = (New-Object System.Windows.Interop.WindowInteropHelper($targetWindow)).Handle
+        if ($h -eq [IntPtr]::Zero) { return }
+        $dark = 1
+        [void][VigilWin32]::DwmSetWindowAttribute($h, 20, [ref]$dark, 4)
+        $m = New-Object VigilMargins
+        $m.cxLeftWidth = -1; $m.cxRightWidth = -1; $m.cyTopHeight = -1; $m.cyBottomHeight = -1
+        [void][VigilWin32]::DwmExtendFrameIntoClientArea($h, [ref]$m)
+        $bt = $backdropType
+        [void][VigilWin32]::DwmSetWindowAttribute($h, 38, [ref]$bt, 4)
+    } catch {
+        $em = 'Apply-VigilFluentBackdrop failed: ' + $_.Exception.Message
+        Write-VigilLog $em
+    }
+}
 
 function Find-VigilPwshExe {
     # Prefer pwsh 7.x over Windows PowerShell 5.1 for Fluent support.
@@ -1336,7 +1356,7 @@ $editPromptXaml = @'
         Title="VIGIL - Edit"
         Width="440" SizeToContent="Height"
         WindowStyle="None" ResizeMode="NoResize"
-        AllowsTransparency="True" Background="Transparent"
+        AllowsTransparency="False" Background="{x:Null}"
         Topmost="True" ShowInTaskbar="False"
         TextOptions.TextFormattingMode="Ideal"
         TextOptions.TextRenderingMode="Grayscale"
@@ -1345,9 +1365,6 @@ $editPromptXaml = @'
         WindowStartupLocation="Manual">
   <Border CornerRadius="0" Background="#0A0A0A"
           BorderBrush="#2A2A2A" BorderThickness="1" Margin="14">
-    <Border.Effect>
-      <DropShadowEffect Color="#000000" BlurRadius="40" ShadowDepth="0" Opacity="0.75"/>
-    </Border.Effect>
     <StackPanel Margin="22,20,22,20">
       <TextBlock x:Name="EditLabel" Text="Edit" FontSize="15" FontWeight="SemiBold"
                  Foreground="#FAFAFA" Margin="0,0,0,12"/>
@@ -1430,6 +1447,7 @@ function Show-VigilEditPrompt {
             if ($prevFg -ne [IntPtr]::Zero) { [VigilWin32]::SetForegroundWindow($prevFg) | Out-Null }
         }.GetNewClosure())
 
+        $ewin.Add_SourceInitialized({ Apply-VigilFluentBackdrop -targetWindow $ewin -backdropType 3 }.GetNewClosure())
         $ewin.Show()
         $ewin.Activate() | Out-Null
         $text.Focus() | Out-Null
@@ -1607,7 +1625,7 @@ $quickAddXaml = @'
         Title="VIGIL - New task"
         Width="460" SizeToContent="Height"
         WindowStyle="None" ResizeMode="NoResize"
-        AllowsTransparency="True" Background="Transparent"
+        AllowsTransparency="False" Background="{x:Null}"
         Topmost="True" ShowInTaskbar="False"
         TextOptions.TextFormattingMode="Ideal"
         TextOptions.TextRenderingMode="Grayscale"
@@ -1616,9 +1634,6 @@ $quickAddXaml = @'
         WindowStartupLocation="Manual">
   <Border CornerRadius="0" Background="#0A0A0A"
           BorderBrush="#2A2A2A" BorderThickness="1" Margin="14">
-    <Border.Effect>
-      <DropShadowEffect Color="#000000" BlurRadius="40" ShadowDepth="0" Opacity="0.75"/>
-    </Border.Effect>
     <StackPanel Margin="22,20,22,20">
       <TextBlock Text="New task" FontSize="15" FontWeight="SemiBold"
                  Foreground="#FAFAFA" Margin="0,0,0,12"/>
@@ -1812,6 +1827,7 @@ function Show-QuickAdd {
             }
         }.GetNewClosure())
 
+        $qwin.Add_SourceInitialized({ Apply-VigilFluentBackdrop -targetWindow $qwin -backdropType 3 }.GetNewClosure())
         $qwin.Show()
         $qwin.Activate() | Out-Null
         $txtTitle.Focus() | Out-Null
