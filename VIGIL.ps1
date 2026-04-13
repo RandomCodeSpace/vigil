@@ -12,7 +12,7 @@ param()
 
 # Build stamp - bumped on every commit. Visible in status bar + vigil.log.
 # Format: YYYY-MM-DD HH:MM (UTC)  buildN
-$script:VigilVersion = '2026-04-13 23:45 UTC  build23 event-sender-fix'
+$script:VigilVersion = '2026-04-14 00:15 UTC  build24 hotkey-csharp-bridge'
 
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName PresentationFramework
@@ -21,7 +21,7 @@ Add-Type -AssemblyName WindowsBase
 Add-Type -AssemblyName System.Security
 Add-Type -AssemblyName System.Windows.Forms
 
-# --- Win32 P/Invoke (hotkey, window activation, foreground tracking) ------
+# --- Win32 P/Invoke (foreground tracking + window activation) --------------
 if (-not ([System.Management.Automation.PSTypeName]'VigilWin32').Type) {
     Add-Type -ErrorAction Stop -TypeDefinition @"
 using System;
@@ -32,8 +32,46 @@ public class VigilWin32 {
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
     [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
     [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
-    [DllImport("user32.dll")] public static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
-    [DllImport("user32.dll")] public static extern bool UnregisterHotKey(IntPtr hWnd, int id);
+}
+"@
+}
+
+# --- Hotkey helper (C# bridge so PS avoids HwndSourceHook ref-delegate cast)
+if (-not ([System.Management.Automation.PSTypeName]'VigilHotkey').Type) {
+    Add-Type -ErrorAction Stop -ReferencedAssemblies PresentationCore, WindowsBase -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+using System.Windows.Interop;
+public static class VigilHotkey {
+    public static event Action HotkeyPressed;
+    private const int WM_HOTKEY = 0x0312;
+    private const int HOTKEY_ID = 9001;
+    private static HwndSource _src;
+
+    public static bool Register(IntPtr hwnd, uint mods, uint vk) {
+        _src = HwndSource.FromHwnd(hwnd);
+        if (_src == null) return false;
+        _src.AddHook(WndProc);
+        return RegisterHotKey(hwnd, HOTKEY_ID, mods, vk);
+    }
+
+    public static void Unregister(IntPtr hwnd) {
+        try { UnregisterHotKey(hwnd, HOTKEY_ID); } catch { }
+        if (_src != null) { try { _src.RemoveHook(WndProc); } catch { } _src = null; }
+    }
+
+    private static IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled) {
+        if (msg == WM_HOTKEY && wParam.ToInt32() == HOTKEY_ID) {
+            var h = HotkeyPressed;
+            if (h != null) h();
+        }
+        return IntPtr.Zero;
+    }
+
+    [DllImport("user32.dll")]
+    private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
+    [DllImport("user32.dll")]
+    private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
 }
 "@
 }
@@ -1032,33 +1070,28 @@ function Show-QuickAdd {
 
 # --- Global hotkey registration (Ctrl+Win+A) ------------------------------
 
-$script:HotkeyId = 9001
 $script:HotkeyRegistered = $false
+
+# Subscribe to the C# event — plain Action delegate, no ref-param cast needed
+[VigilHotkey]::add_HotkeyPressed({
+    try { Show-QuickAdd } catch {
+        $em = 'Hotkey handler error: ' + $_.Exception.Message
+        Write-VigilLog $em
+    }
+})
 
 $window.Add_Loaded({
     try {
         $helper = New-Object System.Windows.Interop.WindowInteropHelper($window)
         $hwnd = $helper.Handle
-        $MOD_CONTROL = 0x0002
-        $MOD_WIN     = 0x0008
-        $VK_A        = 0x41
+        $MOD_CONTROL = [uint32]0x0002
+        $MOD_WIN     = [uint32]0x0008
+        $VK_A        = [uint32]0x41
         $mods = [uint32]($MOD_CONTROL -bor $MOD_WIN)
-        $ok = [VigilWin32]::RegisterHotKey($hwnd, $script:HotkeyId, $mods, [uint32]$VK_A)
+        $ok = [VigilHotkey]::Register($hwnd, $mods, $VK_A)
         if ($ok) {
             $script:HotkeyRegistered = $true
             Write-VigilLog 'Hotkey registered: Ctrl+Win+A'
-            $src = [System.Windows.Interop.HwndSource]::FromHwnd($hwnd)
-            $hook = [System.Windows.Interop.HwndSourceHook]{
-                param($h, $msg, $wp, $lp, $handled)
-                if ($msg -eq 0x0312 -and $wp.ToInt32() -eq 9001) {
-                    try { Show-QuickAdd } catch {
-                        $em = 'Hotkey handler error: ' + $_.Exception.Message
-                        Write-VigilLog $em
-                    }
-                }
-                return [IntPtr]::Zero
-            }
-            $src.AddHook($hook)
         } else {
             Write-VigilLog 'Hotkey registration FAILED - Ctrl+Win+A may already be in use'
         }
@@ -1072,10 +1105,26 @@ $window.Add_Closing({
     if ($script:HotkeyRegistered) {
         try {
             $helper = New-Object System.Windows.Interop.WindowInteropHelper($window)
-            [void][VigilWin32]::UnregisterHotKey($helper.Handle, $script:HotkeyId)
+            [VigilHotkey]::Unregister($helper.Handle)
         } catch {}
     }
 })
 
 Refresh-Render
-[void]$window.ShowDialog()
+
+# Wrap ShowDialog so any handler failure lands in vigil.log with context
+try {
+    [void]$window.ShowDialog()
+} catch {
+    $ex = $_.Exception
+    $msg = 'ShowDialog FAILED: {0}' -f $ex.Message
+    Write-VigilLog $msg
+    if ($ex.InnerException) {
+        $im = 'Inner: {0}' -f $ex.InnerException.Message
+        Write-VigilLog $im
+    }
+    if ($ex.StackTrace) {
+        Write-VigilLog $ex.StackTrace
+    }
+    throw
+}
