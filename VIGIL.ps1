@@ -13,7 +13,7 @@ param(
 
 # Build stamp - bumped on every commit. Visible in status bar + vigil.log.
 # Format: YYYY-MM-DD HH:MM (UTC)  buildN
-$script:VigilVersion = '2026-04-14 03:10 UTC  build52 export-no-calendar'
+$script:VigilVersion = '2026-04-14 03:10 UTC  build53 unified-toolbar-icon'
 
 $ErrorActionPreference = 'Stop'
 
@@ -810,7 +810,7 @@ $xaml = @'
         Width="420" SizeToContent="Height"
         WindowStyle="None" ResizeMode="NoResize"
         AllowsTransparency="False" Background="{x:Null}" {{THEMEMODE}}
-        Topmost="True" ShowInTaskbar="False"
+        Topmost="True" ShowInTaskbar="True"
         TextOptions.TextFormattingMode="Ideal"
         TextOptions.TextRenderingMode="Grayscale"
         UseLayoutRounding="True"
@@ -818,7 +818,7 @@ $xaml = @'
         FontFamily="Segoe UI">
 
   <Border x:Name="OuterFrame" CornerRadius="0" Background="Transparent"
-          BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}" BorderThickness="1">
+          BorderThickness="0">
     <Grid>
       <Grid.RowDefinitions>
         <RowDefinition Height="Auto"/>
@@ -826,36 +826,21 @@ $xaml = @'
         <RowDefinition Height="Auto"/>
       </Grid.RowDefinitions>
 
-      <!-- Title bar -->
-      <Border Grid.Row="0" x:Name="TitleBar" Background="Transparent"
-              CornerRadius="0" Padding="12,0,0,0" Height="32"
-              BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}" BorderThickness="0,0,0,1">
+      <!-- Toolbar (chromeless title bar - all items uniform 22px height) -->
+      <Border Grid.Row="0" x:Name="TitleBar" Background="Transparent" Padding="10,6">
         <Grid>
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto"/>
-            <ColumnDefinition Width="Auto"/>
             <ColumnDefinition Width="*"/>
-            <ColumnDefinition Width="Auto"/>
             <ColumnDefinition Width="Auto"/>
           </Grid.ColumnDefinitions>
 
           <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-            <TextBlock Text="VIGIL" FontSize="11" FontWeight="Bold"
-                       FontFamily="Consolas, Cascadia Mono, Courier New"
-                       Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
-            <TextBlock x:Name="FluentLabel" Text="..."
-                       FontSize="8" FontWeight="Bold" Margin="8,0,0,0"
-                       FontFamily="Consolas, Cascadia Mono, Courier New"
-                       Foreground="{DynamicResource TextFillColorTertiaryBrush}"
-                       VerticalAlignment="Center"/>
-          </StackPanel>
-
-          <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="10,0,0,0">
             <Border x:Name="CountCalBadge" Background="{DynamicResource AccentFillColorDefaultBrush}"
-                    CornerRadius="0" Padding="6,1" VerticalAlignment="Center"
-                    MinWidth="22" Height="16" ToolTip="Calendar items">
-              <StackPanel Orientation="Horizontal">
-                <TextBlock Text="C " FontSize="9" FontWeight="Bold" Opacity="0.7"
+                    CornerRadius="0" Padding="8,2" Height="22"
+                    VerticalAlignment="Center" MinWidth="44" ToolTip="Calendar items">
+              <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock Text="CAL " FontSize="9" FontWeight="Bold" Opacity="0.75"
                            FontFamily="Consolas, Cascadia Mono, Courier New"
                            Foreground="{DynamicResource TextOnAccentFillColorPrimaryBrush}"
                            VerticalAlignment="Center"/>
@@ -867,10 +852,10 @@ $xaml = @'
             </Border>
             <Border x:Name="CountTaskBadge" Background="{DynamicResource ControlFillColorDefaultBrush}"
                     BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}" BorderThickness="1"
-                    CornerRadius="0" Padding="6,0" Margin="4,0,0,0" VerticalAlignment="Center"
-                    MinWidth="22" Height="16" ToolTip="Tasks">
-              <StackPanel Orientation="Horizontal">
-                <TextBlock Text="T " FontSize="9" FontWeight="Bold" Opacity="0.7"
+                    CornerRadius="0" Padding="8,1" Margin="6,0,0,0" Height="22"
+                    VerticalAlignment="Center" MinWidth="44" ToolTip="Tasks">
+              <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock Text="TASK " FontSize="9" FontWeight="Bold" Opacity="0.75"
                            FontFamily="Consolas, Cascadia Mono, Courier New"
                            Foreground="{DynamicResource TextFillColorPrimaryBrush}"
                            VerticalAlignment="Center"/>
@@ -882,26 +867,19 @@ $xaml = @'
             </Border>
           </StackPanel>
 
-          <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
+          <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
             <Button x:Name="BtnSync" Content="SYNC"
-                    Margin="0,0,4,0"
-                    ToolTip="Sync from Outlook"/>
+                    Height="22" Padding="8,0" FontSize="9"
+                    FontFamily="Consolas, Cascadia Mono, Courier New"
+                    Margin="0,0,4,0" ToolTip="Sync from Outlook"/>
             <Button x:Name="BtnSort" Content="SMART"
-                    Margin="0,0,4,0"
-                    ToolTip="Sort / Filter"/>
+                    Height="22" Padding="8,0" FontSize="9"
+                    FontFamily="Consolas, Cascadia Mono, Courier New"
+                    Margin="0,0,4,0" ToolTip="Sort / Filter"/>
             <Button x:Name="BtnInfo" Content="&#xE946;"
-                    FontFamily="Segoe MDL2 Assets" FontSize="12"
-                    MinWidth="28" Padding="0"
-                    Margin="0,0,6,0"
+                    Height="22" Width="28" Padding="0" FontSize="11"
+                    FontFamily="Segoe MDL2 Assets"
                     ToolTip="Keyboard shortcuts &amp; guide"/>
-          </StackPanel>
-
-          <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Stretch">
-            <Button x:Name="BtnCollapse" Content="&#xE921;"
-                    ToolTip="Toggle compact (right-click for menu)"
-                    FontFamily="Segoe MDL2 Assets" FontSize="10"
-                    Width="46" Padding="0" Background="Transparent" BorderThickness="0"
-                    Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
           </StackPanel>
         </Grid>
       </Border>
@@ -960,7 +938,6 @@ $OuterFrame  = $window.FindName('OuterFrame')
 $FluentLabel = $window.FindName('FluentLabel')
 $TitleBar    = $window.FindName('TitleBar')
 $SearchInput = $window.FindName('SearchInput')
-$BtnCollapse = $window.FindName('BtnCollapse')
 $BtnSort     = $window.FindName('BtnSort')
 $BtnSync     = $window.FindName('BtnSync')
 $BtnInfo     = $window.FindName('BtnInfo')
@@ -1486,46 +1463,14 @@ function Show-VigilEditPrompt {
 }
 
 # --- Event wiring ----------------------------------------------------------
-# Hover brush for the minimize / compact button
-$captionHoverBrush = New-Object System.Windows.Media.SolidColorBrush(
-    [System.Windows.Media.Color]::FromArgb(40, 128, 128, 128))
-$BtnCollapse.Add_MouseEnter({ $BtnCollapse.Background = $captionHoverBrush })
-$BtnCollapse.Add_MouseLeave({ $BtnCollapse.Background = [System.Windows.Media.Brushes]::Transparent })
-
-# Right-click context menu on the compact button -> Close (and Show, About)
-$collapseMenu = New-Object System.Windows.Controls.ContextMenu
-$miAbout = New-Object System.Windows.Controls.MenuItem
-$miAbout.Header = 'Shortcuts...'
-$miAbout.Add_Click({ Show-VigilWelcome -Force })
-$collapseMenu.Items.Add($miAbout) | Out-Null
-$collapseMenu.Items.Add((New-Object System.Windows.Controls.Separator)) | Out-Null
-$miClose = New-Object System.Windows.Controls.MenuItem
-$miClose.Header = 'Close VIGIL'
-$miClose.Add_Click({
-    $Global:VigilSettings.posX = [int]$window.Left
-    $Global:VigilSettings.posY = [int]$window.Top
-    Save-VigilSettings $Global:VigilSettings
-    $window.Close()
-})
-$collapseMenu.Items.Add($miClose) | Out-Null
-$BtnCollapse.ContextMenu = $collapseMenu
-
-# Title bar drag + double-click toggles compact mode
-$TitleBar.Add_MouseLeftButtonDown({
-    param($s, $e)
-    if ($e.ClickCount -ge 2) {
-        & $script:ToggleCompactFn
-        $e.Handled = $true
-    } else {
-        $window.DragMove()
-    }
-})
-
+# Compact-mode toggle (called from title bar double-click)
 $script:IsCollapsed = $false
 $script:ToggleCompactFn = {
     if ($script:IsCollapsed) {
         $TaskArea.Visibility   = 'Visible'
         $StatusArea.Visibility = 'Visible'
+        $CountCalBadge.Visibility  = 'Visible'
+        $CountTaskBadge.Visibility = 'Visible'
         $BtnSort.Visibility    = 'Visible'
         $BtnSync.Visibility    = 'Visible'
         $BtnInfo.Visibility    = 'Visible'
@@ -1541,7 +1486,39 @@ $script:ToggleCompactFn = {
         $script:IsCollapsed = $true
     }
 }
-$BtnCollapse.Add_Click({ & $script:ToggleCompactFn })
+
+# Right-click context menu attached to the title bar
+$titleMenu = New-Object System.Windows.Controls.ContextMenu
+$miAbout = New-Object System.Windows.Controls.MenuItem
+$miAbout.Header = 'Shortcuts...'
+$miAbout.Add_Click({ Show-VigilWelcome -Force })
+$titleMenu.Items.Add($miAbout) | Out-Null
+$miCompact = New-Object System.Windows.Controls.MenuItem
+$miCompact.Header = 'Toggle compact'
+$miCompact.Add_Click({ & $script:ToggleCompactFn })
+$titleMenu.Items.Add($miCompact) | Out-Null
+$titleMenu.Items.Add((New-Object System.Windows.Controls.Separator)) | Out-Null
+$miClose = New-Object System.Windows.Controls.MenuItem
+$miClose.Header = 'Close VIGIL'
+$miClose.Add_Click({
+    $Global:VigilSettings.posX = [int]$window.Left
+    $Global:VigilSettings.posY = [int]$window.Top
+    Save-VigilSettings $Global:VigilSettings
+    $window.Close()
+})
+$titleMenu.Items.Add($miClose) | Out-Null
+$TitleBar.ContextMenu = $titleMenu
+
+# Title bar drag (single click) + double-click toggles compact mode
+$TitleBar.Add_MouseLeftButtonDown({
+    param($s, $e)
+    if ($e.ClickCount -ge 2) {
+        & $script:ToggleCompactFn
+        $e.Handled = $true
+    } else {
+        $window.DragMove()
+    }
+})
 
 $sortMenu = New-Object System.Windows.Controls.ContextMenu
 
@@ -2036,10 +2013,53 @@ Refresh-Render
 # libgdiplus and cannot load System.Drawing.Gdip at script-parse time,
 # even behind an if-guard.
 
+function New-VigilIconBitmap {
+    # Build a 32x32 "V" badge for window + tray icons. Hardcoded violet bg
+    # because tray icon tinting from theme accent is a corner case not worth.
+    $bmp = New-Object System.Drawing.Bitmap 32, 32
+    $g = [System.Drawing.Graphics]::FromImage($bmp)
+    $g.SmoothingMode = 'AntiAlias'
+    $g.TextRenderingHint = 'AntiAliasGridFit'
+    $bg = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(255, 124, 92, 255))
+    $g.FillRectangle($bg, 0, 0, 32, 32)
+    $font = New-Object System.Drawing.Font('Consolas', 18, [System.Drawing.FontStyle]::Bold)
+    $fg = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::White)
+    $sf = New-Object System.Drawing.StringFormat
+    $sf.Alignment = 'Center'
+    $sf.LineAlignment = 'Center'
+    $rect = New-Object System.Drawing.RectangleF(0, 0, 32, 32)
+    $g.DrawString('V', $font, $fg, $rect, $sf)
+    $g.Dispose(); $bg.Dispose(); $fg.Dispose(); $font.Dispose()
+    return $bmp
+}
+
+function New-VigilWinFormsIcon {
+    $bmp = New-VigilIconBitmap
+    try {
+        $h = $bmp.GetHicon()
+        return [System.Drawing.Icon]::FromHandle($h)
+    } finally {
+        $bmp.Dispose()
+    }
+}
+
+function New-VigilWpfIcon {
+    $bmp = New-VigilIconBitmap
+    try {
+        $h = $bmp.GetHicon()
+        return [System.Windows.Interop.Imaging]::CreateBitmapSourceFromHIcon(
+            $h,
+            [System.Windows.Int32Rect]::Empty,
+            [System.Windows.Media.Imaging.BitmapSizeOptions]::FromEmptyOptions())
+    } finally {
+        $bmp.Dispose()
+    }
+}
+
 function Install-VigilTrayIcon {
     try {
         $ni = New-Object System.Windows.Forms.NotifyIcon
-        $ni.Icon = [System.Drawing.SystemIcons]::Application
+        try { $ni.Icon = New-VigilWinFormsIcon } catch { $ni.Icon = [System.Drawing.SystemIcons]::Application }
         $ni.Visible = $true
         $ni.Text = 'VIGIL'
 
@@ -2114,6 +2134,14 @@ function Show-VigilOverdueBalloon {
 }
 
 $script:TrayIcon = $null
+# Window taskbar icon (matches the system tray icon - both drawn from
+# New-VigilIconBitmap so the brand mark is consistent)
+try {
+    $window.Icon = New-VigilWpfIcon
+} catch {
+    Write-VigilLog ('Window icon set failed: ' + $_.Exception.Message)
+}
+
 Install-VigilTrayIcon
 $window.Add_Loaded({ Show-VigilOverdueBalloon })
 
