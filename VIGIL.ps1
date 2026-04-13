@@ -13,7 +13,7 @@ param(
 
 # Build stamp - bumped on every commit. Visible in status bar + vigil.log.
 # Format: YYYY-MM-DD HH:MM (UTC)  buildN
-$script:VigilVersion = '2026-04-14 03:10 UTC  build47 system-theme-grouped'
+$script:VigilVersion = '2026-04-14 03:10 UTC  build48 dynamic-brushes-wider-split-count'
 
 $ErrorActionPreference = 'Stop'
 
@@ -800,7 +800,7 @@ $xaml = @'
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="VIGIL"
-        Width="360" SizeToContent="Height"
+        Width="420" SizeToContent="Height"
         WindowStyle="None" ResizeMode="NoResize"
         AllowsTransparency="False" Background="{x:Null}" {{THEMEMODE}}
         Topmost="True" ShowInTaskbar="False"
@@ -809,28 +809,9 @@ $xaml = @'
         UseLayoutRounding="True"
         SnapsToDevicePixels="True"
         FontFamily="Segoe UI">
-  <Window.Resources>
-    <!-- Monochrome tactical theme: sharp corners, hairlines, red for urgent only -->
-    <SolidColorBrush x:Key="SurfaceBase"    Color="#0A0A0A"/>
-    <SolidColorBrush x:Key="SurfaceElev1"   Color="#161616"/>
-    <SolidColorBrush x:Key="SurfaceElev2"   Color="#1E1E1E"/>
-    <SolidColorBrush x:Key="SurfaceHover"   Color="#262626"/>
-    <SolidColorBrush x:Key="Divider"        Color="#1F1F1F"/>
-    <SolidColorBrush x:Key="BorderSubtle"   Color="#2A2A2A"/>
-    <SolidColorBrush x:Key="TextPrimary"    Color="#FAFAFA"/>
-    <SolidColorBrush x:Key="TextSecondary"  Color="#888888"/>
-    <SolidColorBrush x:Key="TextTertiary"   Color="#4D4D4D"/>
-    <SolidColorBrush x:Key="Accent"         Color="#FAFAFA"/>
-    <SolidColorBrush x:Key="AccentInvert"   Color="#0A0A0A"/>
-    <SolidColorBrush x:Key="Urgent"         Color="#FF3B30"/>
-    <SolidColorBrush x:Key="UrgentSoft"     Color="#FF6B61"/>
-    <SolidColorBrush x:Key="Warn"           Color="#FF9F0A"/>
-    <SolidColorBrush x:Key="Success"        Color="#32D74B"/>
-
-  </Window.Resources>
 
   <Border x:Name="OuterFrame" CornerRadius="0" Background="Transparent"
-          BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1">
+          BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}" BorderThickness="1">
     <Grid>
       <Grid.RowDefinitions>
         <RowDefinition Height="Auto"/>
@@ -841,7 +822,7 @@ $xaml = @'
       <!-- Title bar -->
       <Border Grid.Row="0" x:Name="TitleBar" Background="Transparent"
               CornerRadius="0" Padding="12,0" Height="38"
-              BorderBrush="{StaticResource Divider}" BorderThickness="0,0,0,1">
+              BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}" BorderThickness="0,0,0,1">
         <Grid>
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto"/>
@@ -854,22 +835,45 @@ $xaml = @'
           <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
             <TextBlock Text="VIGIL" FontSize="11" FontWeight="Bold"
                        FontFamily="Consolas, Cascadia Mono, Courier New"
-                       Foreground="{StaticResource TextPrimary}"/>
+                       Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
             <TextBlock x:Name="FluentLabel" Text="..."
                        FontSize="8" FontWeight="Bold" Margin="8,0,0,0"
                        FontFamily="Consolas, Cascadia Mono, Courier New"
-                       Foreground="{StaticResource TextTertiary}"
+                       Foreground="{DynamicResource TextFillColorTertiaryBrush}"
                        VerticalAlignment="Center"/>
           </StackPanel>
 
-          <Border Grid.Column="1" x:Name="CountBadge" Background="{StaticResource Accent}"
-                  CornerRadius="0" Padding="5,1" Margin="8,0,0,0"
-                  VerticalAlignment="Center" MinWidth="16" Height="15">
-            <TextBlock x:Name="CountText" Text="0" FontSize="9" FontWeight="Bold"
-                       FontFamily="Consolas, Cascadia Mono, Courier New"
-                       Foreground="{StaticResource AccentInvert}"
-                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
-          </Border>
+          <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="10,0,0,0">
+            <Border x:Name="CountCalBadge" Background="{DynamicResource AccentFillColorDefaultBrush}"
+                    CornerRadius="0" Padding="6,1" VerticalAlignment="Center"
+                    MinWidth="22" Height="16" ToolTip="Calendar items">
+              <StackPanel Orientation="Horizontal">
+                <TextBlock Text="C " FontSize="9" FontWeight="Bold" Opacity="0.7"
+                           FontFamily="Consolas, Cascadia Mono, Courier New"
+                           Foreground="{DynamicResource TextOnAccentFillColorPrimaryBrush}"
+                           VerticalAlignment="Center"/>
+                <TextBlock x:Name="CountCalText" Text="0" FontSize="9" FontWeight="Bold"
+                           FontFamily="Consolas, Cascadia Mono, Courier New"
+                           Foreground="{DynamicResource TextOnAccentFillColorPrimaryBrush}"
+                           VerticalAlignment="Center"/>
+              </StackPanel>
+            </Border>
+            <Border x:Name="CountTaskBadge" Background="{DynamicResource ControlFillColorDefaultBrush}"
+                    BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}" BorderThickness="1"
+                    CornerRadius="0" Padding="6,0" Margin="4,0,0,0" VerticalAlignment="Center"
+                    MinWidth="22" Height="16" ToolTip="Tasks">
+              <StackPanel Orientation="Horizontal">
+                <TextBlock Text="T " FontSize="9" FontWeight="Bold" Opacity="0.7"
+                           FontFamily="Consolas, Cascadia Mono, Courier New"
+                           Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                           VerticalAlignment="Center"/>
+                <TextBlock x:Name="CountTaskText" Text="0" FontSize="9" FontWeight="Bold"
+                           FontFamily="Consolas, Cascadia Mono, Courier New"
+                           Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                           VerticalAlignment="Center"/>
+              </StackPanel>
+            </Border>
+          </StackPanel>
 
           <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
             <Button x:Name="BtnSync" Content="SYNC"
@@ -898,7 +902,7 @@ $xaml = @'
                    Margin="12,8,12,4" FontSize="12"
                    VerticalContentAlignment="Center"
                    ToolTip="Filter tasks by title or notes (Ctrl+F)"/>
-          <ScrollViewer MaxHeight="340" VerticalScrollBarVisibility="Auto"
+          <ScrollViewer MaxHeight="420" VerticalScrollBarVisibility="Auto"
                         HorizontalScrollBarVisibility="Disabled" Padding="0,2,0,0">
             <ItemsControl x:Name="TaskList">
               <ItemsControl.ItemsPanel>
@@ -913,16 +917,16 @@ $xaml = @'
 
       <!-- Status bar: monospace, tight -->
       <Border Grid.Row="2" x:Name="StatusArea" Background="Transparent"
-              BorderBrush="{StaticResource Divider}" BorderThickness="0,1,0,0"
+              BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}" BorderThickness="0,1,0,0"
               CornerRadius="0" Padding="12,5">
         <Grid>
           <TextBlock x:Name="StatusLeft" Text="" FontSize="9"
                      FontFamily="Consolas, Cascadia Mono, Courier New"
-                     Foreground="{StaticResource TextTertiary}"
+                     Foreground="{DynamicResource TextFillColorTertiaryBrush}"
                      VerticalAlignment="Center" HorizontalAlignment="Left"/>
           <TextBlock x:Name="StatusRight" Text="" FontSize="9"
                      FontFamily="Consolas, Cascadia Mono, Courier New"
-                     Foreground="{StaticResource TextSecondary}"
+                     Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                      VerticalAlignment="Center" HorizontalAlignment="Right"/>
         </Grid>
       </Border>
@@ -951,8 +955,10 @@ $BtnSort     = $window.FindName('BtnSort')
 $BtnSync     = $window.FindName('BtnSync')
 $TaskArea    = $window.FindName('TaskArea')
 $TaskList    = $window.FindName('TaskList')
-$CountText   = $window.FindName('CountText')
-$CountBadge  = $window.FindName('CountBadge')
+$CountCalText   = $window.FindName('CountCalText')
+$CountCalBadge  = $window.FindName('CountCalBadge')
+$CountTaskText  = $window.FindName('CountTaskText')
+$CountTaskBadge = $window.FindName('CountTaskBadge')
 $StatusArea  = $window.FindName('StatusArea')
 $StatusLeft  = $window.FindName('StatusLeft')
 $StatusRight = $window.FindName('StatusRight')
@@ -1234,8 +1240,13 @@ function Refresh-Render {
         $isFirst = $false
     }
     $active = @($Global:VigilTasks | Where-Object { -not $_.done }).Count
-    $CountText.Text = [string]$active
-    $CountBadge.Visibility = if ($active -gt 0) { 'Visible' } else { 'Collapsed' }
+    $activeAll = @($Global:VigilTasks | Where-Object { -not $_.done })
+    $calCount  = @($activeAll | Where-Object { $_.source -eq 'outlook-cal' }).Count
+    $taskCount = @($activeAll | Where-Object { $_.source -ne 'outlook-cal' }).Count
+    $CountCalText.Text  = [string]$calCount
+    $CountTaskText.Text = [string]$taskCount
+    $CountCalBadge.Visibility  = if ($calCount  -gt 0) { 'Visible' } else { 'Collapsed' }
+    $CountTaskBadge.Visibility = if ($taskCount -gt 0) { 'Visible' } else { 'Collapsed' }
 
     $rightText = ('{0} active' -f $active)
     if ($Global:VigilSettings.lastSyncTime) {
