@@ -12,7 +12,7 @@ param()
 
 # Build stamp — bumped on every commit. Visible in status bar + vigil.log.
 # Format: YYYY-MM-DD HH:MM (UTC)  buildN
-$script:VigilVersion = '2026-04-13 20:15 UTC  build16 custom-dark'
+$script:VigilVersion = '2026-04-13 20:40 UTC  build17 xaml-fix'
 
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName PresentationFramework
@@ -378,20 +378,6 @@ $xaml = @'
       </Style.Triggers>
     </Style>
 
-    <!-- ContextMenu dark theme -->
-    <Style TargetType="ContextMenu">
-      <Setter Property="Background" Value="{StaticResource SurfaceElev2}"/>
-      <Setter Property="BorderBrush" Value="{StaticResource BorderSubtle}"/>
-      <Setter Property="BorderThickness" Value="1"/>
-      <Setter Property="Padding" Value="4"/>
-      <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
-    </Style>
-    <Style TargetType="MenuItem">
-      <Setter Property="Background" Value="Transparent"/>
-      <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
-      <Setter Property="Padding" Value="10,6"/>
-      <Setter Property="FontSize" Value="12"/>
-    </Style>
   </Window.Resources>
 
   <Border CornerRadius="16" Background="{StaticResource SurfaceBase}"
@@ -420,11 +406,7 @@ $xaml = @'
           </Grid.ColumnDefinitions>
 
           <TextBlock Grid.Column="0" Text="VIGIL" FontSize="16" FontWeight="Bold"
-                     Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center">
-            <TextBlock.Typography>
-              <!-- letter spacing via padding approximation -->
-            </TextBlock.Typography>
-          </TextBlock>
+                     Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center"/>
 
           <Border Grid.Column="1" x:Name="CountBadge" Background="{StaticResource Accent}"
                   CornerRadius="9" Padding="8,2" Margin="12,0,0,0"
