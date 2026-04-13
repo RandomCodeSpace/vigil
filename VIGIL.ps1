@@ -12,7 +12,7 @@ param()
 
 # Build stamp — bumped on every commit. Visible in status bar + vigil.log.
 # Format: YYYY-MM-DD HH:MM (UTC)  buildN
-$script:VigilVersion = '2026-04-13 19:30 UTC  build15 claude-light'
+$script:VigilVersion = '2026-04-13 20:15 UTC  build16 custom-dark'
 
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName PresentationFramework
@@ -158,22 +158,29 @@ function Save-VigilTasks([object[]]$tasks) {
 
 # --- Settings --------------------------------------------------------------
 function Load-VigilSettings {
-    $default = [pscustomobject]@{
+    $default = @{
         posX = 1200; posY = 400; collapsed = $false; showCompleted = $false
         outlookSync = $false; syncIntervalMin = 15; opacity = 1.0
         lastSyncTime = ''; activeFilter = 'all'; autoStartInstalled = $false
         sortMode = 'smart'
     }
-    if (-not (Test-Path $script:SettingsPath)) { return $default }
-    try {
-        $utf8 = New-Object System.Text.UTF8Encoding($false)
-        $raw = [System.IO.File]::ReadAllText($script:SettingsPath, $utf8)
-        return (ConvertFrom-Json $raw)
-    } catch {
-        $smsg = 'Settings load failed: {0}' -f $_.Exception.Message
-        Write-VigilLog $smsg
-        return $default
+    $loaded = @{}
+    if (Test-Path $script:SettingsPath) {
+        try {
+            $utf8 = New-Object System.Text.UTF8Encoding($false)
+            $raw = [System.IO.File]::ReadAllText($script:SettingsPath, $utf8)
+            $parsed = ConvertFrom-Json $raw
+            foreach ($p in $parsed.PSObject.Properties) { $loaded[$p.Name] = $p.Value }
+        } catch {
+            $smsg = 'Settings load failed: {0}' -f $_.Exception.Message
+            Write-VigilLog $smsg
+        }
     }
+    # Merge loaded over defaults — guarantees every key exists on the returned object
+    $merged = @{}
+    foreach ($k in $default.Keys) { $merged[$k] = $default[$k] }
+    foreach ($k in $loaded.Keys)  { $merged[$k] = $loaded[$k]  }
+    [pscustomobject]$merged
 }
 
 function Save-VigilSettings($settings) {
@@ -247,12 +254,12 @@ function Format-DueLabel([string]$iso) {
     } catch { return '' }
 }
 
-# --- XAML (Apple skin, static, no storyboards) -----------------------------
+# --- XAML (custom dark theme, designed from scratch, reduce-motion) --------
 $xaml = @'
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="VIGIL"
-        Width="340" Height="460"
+        Width="360" SizeToContent="Height"
         WindowStyle="None" ResizeMode="NoResize"
         AllowsTransparency="True" Background="Transparent"
         Topmost="True" ShowInTaskbar="False"
@@ -262,33 +269,35 @@ $xaml = @'
         SnapsToDevicePixels="True"
         FontFamily="Segoe UI">
   <Window.Resources>
-    <!-- Claude light theme — parchment canvas, terracotta accent, warm neutrals -->
-    <SolidColorBrush x:Key="SurfaceBase"   Color="#F5F4ED"/>
-    <SolidColorBrush x:Key="SurfaceGlass"  Color="#FAF9F5"/>
-    <SolidColorBrush x:Key="SurfaceCard"   Color="#FAF9F5"/>
-    <SolidColorBrush x:Key="SurfaceCardHi" Color="#E8E6DC"/>
-    <SolidColorBrush x:Key="Divider"       Color="#F0EEE6"/>
-    <SolidColorBrush x:Key="BorderWarm"    Color="#E8E6DC"/>
-    <SolidColorBrush x:Key="TextPrimary"   Color="#141413"/>
-    <SolidColorBrush x:Key="TextSecondary" Color="#5E5D59"/>
-    <SolidColorBrush x:Key="TextTertiary"  Color="#87867F"/>
-    <SolidColorBrush x:Key="Accent"        Color="#C96442"/>
-    <SolidColorBrush x:Key="AccentLight"   Color="#D97757"/>
-    <SolidColorBrush x:Key="Destructive"   Color="#B53333"/>
-    <SolidColorBrush x:Key="Focus"         Color="#3898EC"/>
+    <!-- Custom dark theme — designed from scratch, no external design system -->
+    <SolidColorBrush x:Key="SurfaceBase"    Color="#0B0E14"/>
+    <SolidColorBrush x:Key="SurfaceElev1"   Color="#141922"/>
+    <SolidColorBrush x:Key="SurfaceElev2"   Color="#1C2230"/>
+    <SolidColorBrush x:Key="SurfaceHover"   Color="#222A3A"/>
+    <SolidColorBrush x:Key="Divider"        Color="#1E2431"/>
+    <SolidColorBrush x:Key="BorderSubtle"   Color="#2A3245"/>
+    <SolidColorBrush x:Key="TextPrimary"    Color="#F0F2F7"/>
+    <SolidColorBrush x:Key="TextSecondary"  Color="#8A94A8"/>
+    <SolidColorBrush x:Key="TextTertiary"   Color="#555E70"/>
+    <SolidColorBrush x:Key="Accent"         Color="#7C5CFF"/>
+    <SolidColorBrush x:Key="AccentSoft"     Color="#A996FF"/>
+    <SolidColorBrush x:Key="Urgent"         Color="#FF4D6D"/>
+    <SolidColorBrush x:Key="UrgentSoft"     Color="#FF7A90"/>
+    <SolidColorBrush x:Key="Success"        Color="#2DD4BF"/>
 
-    <Style x:Key="TitleBarButton" TargetType="Button">
+    <!-- Icon button (close, minimize) -->
+    <Style x:Key="IconButton" TargetType="Button">
       <Setter Property="Background" Value="Transparent"/>
       <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
       <Setter Property="BorderThickness" Value="0"/>
-      <Setter Property="Width" Value="28"/>
-      <Setter Property="Height" Value="28"/>
-      <Setter Property="FontSize" Value="14"/>
+      <Setter Property="Width" Value="30"/>
+      <Setter Property="Height" Value="30"/>
+      <Setter Property="FontSize" Value="11"/>
       <Setter Property="Cursor" Value="Hand"/>
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="Button">
-            <Border Background="{TemplateBinding Background}" CornerRadius="6">
+            <Border x:Name="bg" Background="{TemplateBinding Background}" CornerRadius="7">
               <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
             </Border>
           </ControlTemplate>
@@ -296,18 +305,30 @@ $xaml = @'
       </Setter>
       <Style.Triggers>
         <Trigger Property="IsMouseOver" Value="True">
-          <Setter Property="Background" Value="#E8E6DC"/>
+          <Setter Property="Background" Value="{StaticResource SurfaceHover}"/>
           <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
         </Trigger>
       </Style.Triggers>
     </Style>
 
-    <Style x:Key="SortButton" TargetType="Button">
-      <Setter Property="Background" Value="#E8E6DC"/>
-      <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+    <!-- Close button with red hover -->
+    <Style x:Key="CloseButton" TargetType="Button" BasedOn="{StaticResource IconButton}">
+      <Style.Triggers>
+        <Trigger Property="IsMouseOver" Value="True">
+          <Setter Property="Background" Value="#3A1820"/>
+          <Setter Property="Foreground" Value="{StaticResource Urgent}"/>
+        </Trigger>
+      </Style.Triggers>
+    </Style>
+
+    <!-- Primary filled button (accent violet) -->
+    <Style x:Key="PrimaryButton" TargetType="Button">
+      <Setter Property="Background" Value="{StaticResource Accent}"/>
+      <Setter Property="Foreground" Value="#FFFFFF"/>
       <Setter Property="BorderThickness" Value="0"/>
-      <Setter Property="Padding" Value="10,4"/>
-      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="Padding" Value="18,10"/>
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
       <Setter Property="Cursor" Value="Hand"/>
       <Setter Property="Template">
         <Setter.Value>
@@ -321,100 +342,156 @@ $xaml = @'
       </Setter>
       <Style.Triggers>
         <Trigger Property="IsMouseOver" Value="True">
-          <Setter Property="Background" Value="#D1CFC5"/>
+          <Setter Property="Background" Value="#9278FF"/>
         </Trigger>
       </Style.Triggers>
     </Style>
+
+    <!-- Ghost button (used for Sort dropdown trigger) -->
+    <Style x:Key="GhostButton" TargetType="Button">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
+      <Setter Property="BorderBrush" Value="{StaticResource BorderSubtle}"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="Padding" Value="12,6"/>
+      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}"
+                    CornerRadius="7"
+                    Padding="{TemplateBinding Padding}">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+      <Style.Triggers>
+        <Trigger Property="IsMouseOver" Value="True">
+          <Setter Property="Background" Value="{StaticResource SurfaceElev1}"/>
+          <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+          <Setter Property="BorderBrush" Value="{StaticResource Accent}"/>
+        </Trigger>
+      </Style.Triggers>
+    </Style>
+
+    <!-- ContextMenu dark theme -->
+    <Style TargetType="ContextMenu">
+      <Setter Property="Background" Value="{StaticResource SurfaceElev2}"/>
+      <Setter Property="BorderBrush" Value="{StaticResource BorderSubtle}"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="Padding" Value="4"/>
+      <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+    </Style>
+    <Style TargetType="MenuItem">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+      <Setter Property="Padding" Value="10,6"/>
+      <Setter Property="FontSize" Value="12"/>
+    </Style>
   </Window.Resources>
 
-  <Border CornerRadius="12" Background="{StaticResource SurfaceBase}"
-          BorderBrush="{StaticResource BorderWarm}" BorderThickness="1" Margin="8">
+  <Border CornerRadius="16" Background="{StaticResource SurfaceBase}"
+          BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1"
+          Margin="14">
+    <Border.Effect>
+      <DropShadowEffect Color="#000000" BlurRadius="36" ShadowDepth="0" Opacity="0.65"/>
+    </Border.Effect>
     <Grid>
       <Grid.RowDefinitions>
-        <RowDefinition Height="44"/>
-        <RowDefinition Height="*"/>
         <RowDefinition Height="Auto"/>
-        <RowDefinition Height="32"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
       </Grid.RowDefinitions>
 
       <!-- Title bar -->
-      <Border Grid.Row="0" Background="{StaticResource SurfaceGlass}"
-              CornerRadius="12,12,0,0" x:Name="TitleBar">
-        <Border BorderBrush="{StaticResource BorderWarm}" BorderThickness="0,0,0,1">
-          <Grid Margin="14,0">
-            <Grid.ColumnDefinitions>
-              <ColumnDefinition Width="Auto"/>
-              <ColumnDefinition Width="Auto"/>
-              <ColumnDefinition Width="*"/>
-              <ColumnDefinition Width="Auto"/>
-              <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
-            <TextBlock Grid.Column="0" Text="VIGIL" FontFamily="Georgia" FontSize="19"
-                       FontWeight="Medium"
-                       Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center"/>
-            <Border Grid.Column="1" x:Name="CountBadge" Background="{StaticResource Accent}"
-                    CornerRadius="10" Padding="8,2" Margin="10,0,0,0"
-                    VerticalAlignment="Center">
-              <TextBlock x:Name="CountText" Text="0" FontSize="11" FontWeight="SemiBold"
-                         Foreground="#FFFFFF"/>
-            </Border>
-            <Button Grid.Column="3" x:Name="BtnSort" Content="Sort: Smart &#x25BE;"
-                    Style="{StaticResource SortButton}" Margin="0,0,6,0"
-                    ToolTip="Change sort order"/>
-            <StackPanel Grid.Column="4" Orientation="Horizontal">
-              <Button x:Name="BtnCollapse" Content="&#xE921;" FontFamily="Segoe MDL2 Assets" FontSize="10" Style="{StaticResource TitleBarButton}" ToolTip="Minimize"/>
-              <Button x:Name="BtnClose"    Content="&#xE8BB;" FontFamily="Segoe MDL2 Assets" FontSize="10" Style="{StaticResource TitleBarButton}" ToolTip="Close"/>
-            </StackPanel>
-          </Grid>
-        </Border>
+      <Border Grid.Row="0" x:Name="TitleBar" Background="{StaticResource SurfaceElev1}"
+              CornerRadius="16,16,0,0" Padding="18,0" Height="56">
+        <Grid>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="Auto"/>
+          </Grid.ColumnDefinitions>
+
+          <TextBlock Grid.Column="0" Text="VIGIL" FontSize="16" FontWeight="Bold"
+                     Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center">
+            <TextBlock.Typography>
+              <!-- letter spacing via padding approximation -->
+            </TextBlock.Typography>
+          </TextBlock>
+
+          <Border Grid.Column="1" x:Name="CountBadge" Background="{StaticResource Accent}"
+                  CornerRadius="9" Padding="8,2" Margin="12,0,0,0"
+                  VerticalAlignment="Center" MinWidth="22">
+            <TextBlock x:Name="CountText" Text="0" FontSize="11" FontWeight="Bold"
+                       Foreground="#FFFFFF" HorizontalAlignment="Center"/>
+          </Border>
+
+          <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
+            <Button x:Name="BtnSort" Content="Smart &#x25BE;" Style="{StaticResource GhostButton}"
+                    Margin="0,0,10,0" ToolTip="Sort order"/>
+            <Button x:Name="BtnCollapse" Content="&#xE921;" FontFamily="Segoe MDL2 Assets"
+                    Style="{StaticResource IconButton}" ToolTip="Minimize"/>
+            <Button x:Name="BtnClose"    Content="&#xE8BB;" FontFamily="Segoe MDL2 Assets"
+                    Style="{StaticResource CloseButton}" ToolTip="Close" Margin="2,0,0,0"/>
+          </StackPanel>
+        </Grid>
       </Border>
 
-      <!-- Task list -->
-      <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
-                    HorizontalScrollBarVisibility="Disabled" Padding="0,4">
-        <ItemsControl x:Name="TaskList">
-          <ItemsControl.ItemsPanel>
-            <ItemsPanelTemplate>
-              <StackPanel/>
-            </ItemsPanelTemplate>
-          </ItemsControl.ItemsPanel>
-        </ItemsControl>
-      </ScrollViewer>
+      <!-- Task list area -->
+      <Border Grid.Row="1" x:Name="TaskArea" Background="{StaticResource SurfaceBase}">
+        <ScrollViewer MaxHeight="380" VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled" Padding="10,10,10,6">
+          <ItemsControl x:Name="TaskList">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <StackPanel/>
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+          </ItemsControl>
+        </ScrollViewer>
+      </Border>
 
       <!-- Inline add -->
-      <Border Grid.Row="2" BorderBrush="{StaticResource BorderWarm}" BorderThickness="0,1,0,0"
-              Padding="14,10" Background="{StaticResource SurfaceBase}">
+      <Border Grid.Row="2" x:Name="AddArea" Background="{StaticResource SurfaceElev1}"
+              BorderBrush="{StaticResource Divider}" BorderThickness="0,1,0,0" Padding="14,12">
         <Grid>
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*"/>
             <ColumnDefinition Width="Auto"/>
           </Grid.ColumnDefinitions>
-          <Border Grid.Column="0" Background="#FFFFFF" BorderBrush="{StaticResource BorderWarm}"
-                  BorderThickness="1" CornerRadius="8">
+          <Border Grid.Column="0" Background="{StaticResource SurfaceElev2}"
+                  BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1"
+                  CornerRadius="8">
             <TextBox x:Name="AddInput" Background="Transparent"
                      Foreground="{StaticResource TextPrimary}"
-                     BorderThickness="0" Padding="10,8" FontSize="13"
-                     CaretBrush="{StaticResource Accent}"/>
+                     BorderThickness="0" Padding="12,9" FontSize="13"
+                     CaretBrush="{StaticResource Accent}"
+                     VerticalContentAlignment="Center"/>
           </Border>
-          <Border Grid.Column="1" Background="{StaticResource Accent}" CornerRadius="8"
-                  Margin="8,0,0,0">
-            <Button x:Name="BtnAdd" Content="Add" Background="Transparent"
-                    Foreground="White" BorderThickness="0"
-                    Padding="16,8" FontSize="13" FontWeight="Medium" Cursor="Hand"/>
-          </Border>
+          <Button Grid.Column="1" x:Name="BtnAdd" Content="Add"
+                  Style="{StaticResource PrimaryButton}" Margin="10,0,0,0"/>
         </Grid>
       </Border>
 
       <!-- Status bar -->
-      <Border Grid.Row="3" BorderBrush="{StaticResource BorderWarm}" BorderThickness="0,1,0,0"
-              Background="{StaticResource SurfaceBase}">
-        <Grid Margin="14,0">
-          <TextBlock x:Name="StatusLeft" Text="" FontSize="11"
+      <Border Grid.Row="3" x:Name="StatusArea" Background="{StaticResource SurfaceElev1}"
+              BorderBrush="{StaticResource Divider}" BorderThickness="0,1,0,0"
+              CornerRadius="0,0,16,16" Padding="14,8">
+        <Grid>
+          <TextBlock x:Name="StatusLeft" Text="" FontSize="10"
                      Foreground="{StaticResource TextTertiary}"
                      VerticalAlignment="Center" HorizontalAlignment="Left"/>
-          <TextBlock x:Name="StatusRight" Text="" FontSize="11"
+          <TextBlock x:Name="StatusRight" Text="" FontSize="10"
                      Foreground="{StaticResource TextTertiary}"
-                     VerticalAlignment="Center" HorizontalAlignment="Right"/>
+                     VerticalAlignment="Center" HorizontalAlignment="Right"
+                     FontWeight="SemiBold"/>
         </Grid>
       </Border>
     </Grid>
@@ -431,11 +508,14 @@ $TitleBar    = $window.FindName('TitleBar')
 $BtnCollapse = $window.FindName('BtnCollapse')
 $BtnClose    = $window.FindName('BtnClose')
 $BtnSort     = $window.FindName('BtnSort')
+$TaskArea    = $window.FindName('TaskArea')
 $TaskList    = $window.FindName('TaskList')
+$AddArea     = $window.FindName('AddArea')
 $AddInput    = $window.FindName('AddInput')
 $BtnAdd      = $window.FindName('BtnAdd')
 $CountText   = $window.FindName('CountText')
 $CountBadge  = $window.FindName('CountBadge')
+$StatusArea  = $window.FindName('StatusArea')
 $StatusLeft  = $window.FindName('StatusLeft')
 $StatusRight = $window.FindName('StatusRight')
 
@@ -451,12 +531,13 @@ $window.Top  = [math]::Max($wa.Y, [math]::Min($script:Settings.posY, $wa.Bottom 
 # --- Rendering -------------------------------------------------------------
 function Build-TaskCard($task) {
     $border = New-Object System.Windows.Controls.Border
-    $border.Margin = New-Object System.Windows.Thickness(10,4,10,4)
-    $border.Padding = New-Object System.Windows.Thickness(12,10,12,10)
-    $border.CornerRadius = New-Object System.Windows.CornerRadius(8)
-    $ivory = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromRgb(250,249,245))
-    $border.Background = $ivory
-    $border.BorderBrush = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromRgb(232,230,220))
+    $border.Margin = New-Object System.Windows.Thickness(0,0,0,6)
+    $border.Padding = New-Object System.Windows.Thickness(14,11,12,11)
+    $border.CornerRadius = New-Object System.Windows.CornerRadius(10)
+    $elev1 = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromRgb(20,25,34))
+    $borderSubtle = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromRgb(42,50,69))
+    $border.Background = $elev1
+    $border.BorderBrush = $borderSubtle
     $border.BorderThickness = New-Object System.Windows.Thickness(1)
     $border.Cursor = [System.Windows.Input.Cursors]::Hand
 
@@ -465,8 +546,13 @@ function Build-TaskCard($task) {
         try { $isOverdue = ([datetime]::Parse($task.dueDate) -lt (Get-Date)) -and -not $task.done } catch {}
     }
     if ($task.priority -eq 'critical' -or $isOverdue) {
-        $border.BorderBrush = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromRgb(181,51,51))
-        $border.BorderThickness = New-Object System.Windows.Thickness(2,1,1,1)
+        $urgent = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromRgb(255,77,109))
+        $border.BorderBrush = $urgent
+        $border.BorderThickness = New-Object System.Windows.Thickness(3,1,1,1)
+    } elseif ($task.priority -eq 'high') {
+        $accentSoft = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromRgb(169,150,255))
+        $border.BorderBrush = $accentSoft
+        $border.BorderThickness = New-Object System.Windows.Thickness(3,1,1,1)
     }
 
     $grid = New-Object System.Windows.Controls.Grid
@@ -476,26 +562,26 @@ function Build-TaskCard($task) {
 
     $check = New-Object System.Windows.Controls.CheckBox
     $check.IsChecked = $task.done
-    $check.Margin = New-Object System.Windows.Thickness(0,2,10,0)
+    $check.Margin = New-Object System.Windows.Thickness(0,2,12,0)
     $check.VerticalAlignment = 'Top'
-    $check.Foreground = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromRgb(94,93,89))
+    $check.Foreground = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromRgb(138,148,168))
     [System.Windows.Controls.Grid]::SetColumn($check, 0)
 
     $stack = New-Object System.Windows.Controls.StackPanel
     [System.Windows.Controls.Grid]::SetColumn($stack, 1)
 
-    $primaryText   = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromRgb(20,20,19))
-    $secondaryText = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromRgb(94,93,89))
-    $tertiaryText  = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromRgb(135,134,127))
-    $errorText     = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromRgb(181,51,51))
+    $primaryText   = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromRgb(240,242,247))
+    $secondaryText = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromRgb(138,148,168))
+    $tertiaryText  = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromRgb(85,94,112))
+    $urgentText    = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromRgb(255,122,144))
 
     $title = New-Object System.Windows.Controls.TextBlock
     $title.Text = $task.title
-    $title.FontFamily = New-Object System.Windows.Media.FontFamily('Georgia')
-    $title.FontSize = 15
+    $title.FontSize = 14
+    $title.LineHeight = 19
     $title.TextWrapping = 'Wrap'
     switch ($task.priority) {
-        'critical' { $title.FontWeight = 'Bold';     $title.Foreground = $errorText }
+        'critical' { $title.FontWeight = 'Bold';     $title.Foreground = $primaryText }
         'high'     { $title.FontWeight = 'SemiBold'; $title.Foreground = $primaryText }
         'normal'   { $title.FontWeight = 'Normal';   $title.Foreground = $primaryText }
         'low'      { $title.FontWeight = 'Normal';   $title.Foreground = $secondaryText }
@@ -512,10 +598,10 @@ function Build-TaskCard($task) {
     if ($task.source -ne 'manual') { $metaText += $task.source }
     if ($metaText.Count -gt 0) {
         $meta = New-Object System.Windows.Controls.TextBlock
-        $meta.Text = ($metaText -join '  |  ')
-        $meta.FontSize = 12
-        $meta.Margin = New-Object System.Windows.Thickness(0,3,0,0)
-        if ($isOverdue) { $meta.Foreground = $errorText }
+        $meta.Text = ($metaText -join '   ')
+        $meta.FontSize = 11
+        $meta.Margin = New-Object System.Windows.Thickness(0,4,0,0)
+        if ($isOverdue) { $meta.Foreground = $urgentText; $meta.FontWeight = 'SemiBold' }
         else            { $meta.Foreground = $tertiaryText }
         $stack.Children.Add($meta) | Out-Null
     }
@@ -593,11 +679,11 @@ function Build-TaskCard($task) {
     return $border
 }
 
-$script:SortLabels = [ordered]@{
-    smart    = 'Sort: Smart'
-    priority = 'Sort: Priority'
-    due      = 'Sort: Due date'
-    added    = 'Sort: Newest'
+$script:SortLabels = @{
+    smart    = 'Smart'
+    priority = 'Priority'
+    due      = 'Due date'
+    added    = 'Newest'
 }
 
 function Refresh-Render {
@@ -611,14 +697,14 @@ function Refresh-Render {
         $TaskList.Items.Add($card) | Out-Null
     }
     $active = @($script:Tasks | Where-Object { -not $_.done }).Count
-    $CountText.Text = "$active"
+    $CountText.Text = [string]$active
     $CountBadge.Visibility = if ($active -gt 0) { 'Visible' } else { 'Collapsed' }
-    $StatusRight.Text = "$active active"
+    $StatusRight.Text = ('{0} active' -f $active)
     $StatusLeft.Text  = $script:VigilVersion
 
     $label = $script:SortLabels[$mode]
-    if (-not $label) { $label = 'Sort: Smart' }
-    $BtnSort.Content = ($label + ' ' + [char]0x25BE)
+    if (-not $label) { $label = 'Smart' }
+    $BtnSort.Content = ($label + ' ' + [string][char]0x25BE)
 }
 
 function Toggle-Done([string]$id, [bool]$done) {
@@ -655,24 +741,44 @@ $BtnClose.Add_Click({
     $window.Close()
 })
 
+$script:IsCollapsed = $false
 $BtnCollapse.Add_Click({
-    if ($window.Height -gt 44) {
-        $window.Height = 44
+    if ($script:IsCollapsed) {
+        $TaskArea.Visibility   = 'Visible'
+        $AddArea.Visibility    = 'Visible'
+        $StatusArea.Visibility = 'Visible'
+        $script:IsCollapsed = $false
     } else {
-        $window.Height = 460
+        $TaskArea.Visibility   = 'Collapsed'
+        $AddArea.Visibility    = 'Collapsed'
+        $StatusArea.Visibility = 'Collapsed'
+        $script:IsCollapsed = $true
     }
 })
 
+$sortMenu = New-Object System.Windows.Controls.ContextMenu
+$sortModes = @(
+    @{ key = 'smart';    label = 'Smart (overdue + priority)' }
+    @{ key = 'priority'; label = 'Priority' }
+    @{ key = 'due';      label = 'Due date' }
+    @{ key = 'added';    label = 'Newest first' }
+)
+foreach ($opt in $sortModes) {
+    $mi = New-Object System.Windows.Controls.MenuItem
+    $mi.Header = $opt.label
+    $mi.Tag = $opt.key
+    $mi.Add_Click({
+        $k = $this.Tag
+        $script:Settings.sortMode = $k
+        Save-VigilSettings $script:Settings
+        Refresh-Render
+    })
+    $sortMenu.Items.Add($mi) | Out-Null
+}
 $BtnSort.Add_Click({
-    $order = @('smart','priority','due','added')
-    $cur = 'smart'
-    if ($script:Settings.sortMode) { $cur = [string]$script:Settings.sortMode }
-    $idx = [array]::IndexOf($order, $cur)
-    if ($idx -lt 0) { $idx = 0 }
-    $next = $order[($idx + 1) % $order.Count]
-    $script:Settings.sortMode = $next
-    Save-VigilSettings $script:Settings
-    Refresh-Render
+    $sortMenu.PlacementTarget = $BtnSort
+    $sortMenu.Placement = 'Bottom'
+    $sortMenu.IsOpen = $true
 })
 
 $AddFn = {
