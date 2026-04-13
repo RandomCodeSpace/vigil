@@ -13,7 +13,7 @@ param(
 
 # Build stamp - bumped on every commit. Visible in status bar + vigil.log.
 # Format: YYYY-MM-DD HH:MM (UTC)  buildN
-$script:VigilVersion = '2026-04-14 03:10 UTC  build58 status-bar-segoe'
+$script:VigilVersion = '2026-04-13 15:00 UTC  build59 badge-filters'
 
 $ErrorActionPreference = 'Stop'
 
@@ -707,13 +707,32 @@ function Install-VigilStartupShortcut {
 }
 
 function Filter-VigilTasks([object[]]$tasks, [string]$mode) {
-    if (-not $mode) { return $tasks }
-    switch ($mode) {
-        'manual'  { return @($tasks | Where-Object { $_.source -eq 'manual' }) }
-        'outlook' { return @($tasks | Where-Object { $_.source -like 'outlook-*' }) }
-        'urgent'  { return @($tasks | Where-Object { $_.priority -eq 'critical' -or $_.priority -eq 'high' }) }
-        default   { return $tasks }
+    if (-not $mode) { $mode = 'all' }
+    $now = Get-Date
+    $out = @()
+    if ($null -eq $tasks) { return $out }
+    foreach ($t in $tasks) {
+        if ($null -eq $t -or -not $t.id) { continue }
+        $keep = $false
+        switch ($mode) {
+            'cal'     { $keep = ($t.source -eq 'outlook-cal') }
+            'task'    { $keep = ($t.source -ne 'outlook-cal') }
+            'manual'  { $keep = ($t.source -eq 'manual') }
+            'outlook' { $keep = ($t.source -like 'outlook-*') }
+            'urgent'  { $keep = ($t.priority -eq 'critical' -or $t.priority -eq 'high') }
+            'high'    { $keep = ($t.priority -eq 'high') }
+            'crit'    {
+                if ($t.priority -eq 'critical') {
+                    $keep = $true
+                } elseif ($t.dueDate -and -not $t.done) {
+                    try { $keep = ([datetime]::Parse($t.dueDate) -lt $now) } catch { $keep = $false }
+                }
+            }
+            default   { $keep = $true }
+        }
+        if ($keep) { $out += $t }
     }
+    return $out
 }
 
 function Search-VigilTasks([object[]]$tasks, [string]$query) {
@@ -815,7 +834,7 @@ $xaml = @'
         TextOptions.TextRenderingMode="Grayscale"
         UseLayoutRounding="True"
         SnapsToDevicePixels="True"
-        FontFamily="Segoe UI"
+       
        >
 
   <Border x:Name="OuterFrame" CornerRadius="0" Background="Transparent"
@@ -838,14 +857,14 @@ $xaml = @'
 
           <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
             <Border x:Name="CountCalBadge" Background="{DynamicResource AccentFillColorDefaultBrush}"
-                    CornerRadius="0" Padding="8,2" Height="22"
-                    VerticalAlignment="Center" MinWidth="44" ToolTip="Calendar items">
+                    CornerRadius="0" Padding="8,2" Height="22" Tag="cal" Cursor="Hand"
+                    VerticalAlignment="Center" MinWidth="44" ToolTip="Click to filter: Calendar items">
               <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <TextBlock Text="CAL " FontFamily="Segoe UI" FontSize="9" FontWeight="Bold" Opacity="0.75"
+                <TextBlock Text="CAL " FontSize="9" FontWeight="Bold" Opacity="0.75"
                           
                            Foreground="{DynamicResource TextOnAccentFillColorPrimaryBrush}"
                            VerticalAlignment="Center"/>
-                <TextBlock x:Name="CountCalText" Text="0" FontFamily="Segoe UI" FontSize="9" FontWeight="Bold"
+                <TextBlock x:Name="CountCalText" Text="0" FontSize="9" FontWeight="Bold"
                           
                            Foreground="{DynamicResource TextOnAccentFillColorPrimaryBrush}"
                            VerticalAlignment="Center"/>
@@ -853,39 +872,39 @@ $xaml = @'
             </Border>
             <Border x:Name="CountTaskBadge" Background="{DynamicResource ControlFillColorDefaultBrush}"
                     BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}" BorderThickness="1"
-                    CornerRadius="0" Padding="8,1" Margin="6,0,0,0" Height="22"
-                    VerticalAlignment="Center" MinWidth="44" ToolTip="Tasks">
+                    CornerRadius="0" Padding="8,1" Margin="6,0,0,0" Height="22" Tag="task" Cursor="Hand"
+                    VerticalAlignment="Center" MinWidth="44" ToolTip="Click to filter: Tasks">
               <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <TextBlock Text="TASK " FontFamily="Segoe UI" FontSize="9" FontWeight="Bold" Opacity="0.75"
+                <TextBlock Text="TASK " FontSize="9" FontWeight="Bold" Opacity="0.75"
                           
                            Foreground="{DynamicResource TextFillColorPrimaryBrush}"
                            VerticalAlignment="Center"/>
-                <TextBlock x:Name="CountTaskText" Text="0" FontFamily="Segoe UI" FontSize="9" FontWeight="Bold"
+                <TextBlock x:Name="CountTaskText" Text="0" FontSize="9" FontWeight="Bold"
                           
                            Foreground="{DynamicResource TextFillColorPrimaryBrush}"
                            VerticalAlignment="Center"/>
               </StackPanel>
             </Border>
             <Border x:Name="CountCritBadge" Background="{DynamicResource SystemFillColorCriticalBrush}"
-                    CornerRadius="0" Padding="8,2" Margin="6,0,0,0" Height="22"
-                    VerticalAlignment="Center" MinWidth="44" ToolTip="Critical / overdue tasks">
+                    CornerRadius="0" Padding="8,2" Margin="6,0,0,0" Height="22" Tag="crit" Cursor="Hand"
+                    VerticalAlignment="Center" MinWidth="44" ToolTip="Click to filter: Critical / overdue">
               <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <TextBlock Text="CRIT " FontFamily="Segoe UI" FontSize="9" FontWeight="Bold" Opacity="0.85"
+                <TextBlock Text="CRIT " FontSize="9" FontWeight="Bold" Opacity="0.85"
                           
                            Foreground="#FFFFFF" VerticalAlignment="Center"/>
-                <TextBlock x:Name="CountCritText" Text="0" FontFamily="Segoe UI" FontSize="9" FontWeight="Bold"
+                <TextBlock x:Name="CountCritText" Text="0" FontSize="9" FontWeight="Bold"
                           
                            Foreground="#FFFFFF" VerticalAlignment="Center"/>
               </StackPanel>
             </Border>
             <Border x:Name="CountHighBadge" Background="{DynamicResource SystemFillColorCautionBrush}"
-                    CornerRadius="0" Padding="8,2" Margin="6,0,0,0" Height="22"
-                    VerticalAlignment="Center" MinWidth="44" ToolTip="High priority tasks">
+                    CornerRadius="0" Padding="8,2" Margin="6,0,0,0" Height="22" Tag="high" Cursor="Hand"
+                    VerticalAlignment="Center" MinWidth="44" ToolTip="Click to filter: High priority">
               <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <TextBlock Text="HIGH " FontFamily="Segoe UI" FontSize="9" FontWeight="Bold" Opacity="0.85"
+                <TextBlock Text="HIGH " FontSize="9" FontWeight="Bold" Opacity="0.85"
                           
                            Foreground="#000000" VerticalAlignment="Center"/>
-                <TextBlock x:Name="CountHighText" Text="0" FontFamily="Segoe UI" FontSize="9" FontWeight="Bold"
+                <TextBlock x:Name="CountHighText" Text="0" FontSize="9" FontWeight="Bold"
                           
                            Foreground="#000000" VerticalAlignment="Center"/>
               </StackPanel>
@@ -901,10 +920,9 @@ $xaml = @'
                     Height="22" Padding="8,0" FontSize="9"
                    
                     Margin="0,0,4,0" ToolTip="Sort / Filter"/>
-            <Button x:Name="BtnFilter" Content="ALL"
+            <ToggleButton x:Name="BtnShowDone" Content="DONE"
                     Height="22" Padding="8,0" FontSize="9"
-                   
-                    ToolTip="Filter tasks"/>
+                    ToolTip="Show completed tasks"/>
           </StackPanel>
         </Grid>
       </Border>
@@ -950,10 +968,10 @@ $xaml = @'
               BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}" BorderThickness="0,1,0,0"
               CornerRadius="0" Padding="12,5">
         <Grid>
-          <TextBlock x:Name="StatusLeft" Text="" FontSize="10" FontFamily="Segoe UI"
+          <TextBlock x:Name="StatusLeft" Text="" FontSize="10"
                      Foreground="{DynamicResource TextFillColorTertiaryBrush}"
                      VerticalAlignment="Center" HorizontalAlignment="Left"/>
-          <TextBlock x:Name="StatusRight" Text="" FontSize="10" FontFamily="Segoe UI"
+          <TextBlock x:Name="StatusRight" Text="" FontSize="10"
                      Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                      VerticalAlignment="Center" HorizontalAlignment="Right"/>
         </Grid>
@@ -979,7 +997,7 @@ $TitleBar    = $window.FindName('TitleBar')
 $SearchInput = $window.FindName('SearchInput')
 $BtnSort     = $window.FindName('BtnSort')
 $BtnSync     = $window.FindName('BtnSync')
-$BtnFilter   = $window.FindName('BtnFilter')
+$BtnShowDone = $window.FindName('BtnShowDone')
 $TaskArea    = $window.FindName('TaskArea')
 $TaskList    = $window.FindName('TaskList')
 $CalList     = $window.FindName('CalList')
@@ -1266,6 +1284,14 @@ function Refresh-Render {
     $CountTaskBadge.Visibility = if ($taskCount -gt 0) { 'Visible' } else { 'Collapsed' }
     $CountCritBadge.Visibility = if ($critCount -gt 0) { 'Visible' } else { 'Collapsed' }
     $CountHighBadge.Visibility = if ($highCount -gt 0) { 'Visible' } else { 'Collapsed' }
+    $af = [string]$Global:VigilSettings.activeFilter
+    $dim = 0.4
+    $full = 1.0
+    $any = ($af -and $af -ne 'all')
+    $CountCalBadge.Opacity  = if (-not $any -or $af -eq 'cal')  { $full } else { $dim }
+    $CountTaskBadge.Opacity = if (-not $any -or $af -eq 'task') { $full } else { $dim }
+    $CountCritBadge.Opacity = if (-not $any -or $af -eq 'crit') { $full } else { $dim }
+    $CountHighBadge.Opacity = if (-not $any -or $af -eq 'high') { $full } else { $dim }
 
     $rightText = ('{0} active' -f $active)
     if ($Global:VigilSettings.lastSyncTime) {
@@ -1323,7 +1349,7 @@ $editPromptXaml = @'
         TextOptions.TextFormattingMode="Ideal"
         TextOptions.TextRenderingMode="Grayscale"
         UseLayoutRounding="True" SnapsToDevicePixels="True"
-        FontFamily="Segoe UI"
+       
        
         WindowStartupLocation="Manual">
   <StackPanel Margin="20">
@@ -1350,7 +1376,7 @@ $welcomeXaml = @'
         Topmost="True" ShowInTaskbar="False"
         TextOptions.TextFormattingMode="Ideal"
         UseLayoutRounding="True"
-        FontFamily="Segoe UI"
+       
         WindowStartupLocation="CenterScreen">
   <StackPanel Margin="28,24,28,20">
     <TextBlock Text="VIGIL" FontSize="14" FontWeight="Bold" Opacity="0.7"/>
@@ -1505,7 +1531,7 @@ $script:ToggleCompactFn = {
         $CountTaskBadge.Visibility = 'Visible'
         $BtnSort.Visibility    = 'Visible'
         $BtnSync.Visibility    = 'Visible'
-        $BtnFilter.Visibility  = 'Visible'
+        $BtnShowDone.Visibility = 'Visible'
         $window.Opacity = 1.0
         $script:IsCollapsed = $false
     } else {
@@ -1513,7 +1539,7 @@ $script:ToggleCompactFn = {
         $StatusArea.Visibility = 'Collapsed'
         $BtnSort.Visibility    = 'Collapsed'
         $BtnSync.Visibility    = 'Collapsed'
-        $BtnFilter.Visibility  = 'Collapsed'
+        $BtnShowDone.Visibility = 'Collapsed'
         $window.Opacity = 0.65
         $script:IsCollapsed = $true
     }
@@ -1585,46 +1611,34 @@ foreach ($opt in $sortModes) {
     $sortMenu.Items.Add($mi) | Out-Null
 }
 
-# Filter dropdown - its own ContextMenu attached to BtnFilter
-$filterMenu = New-Object System.Windows.Controls.ContextMenu
-$filterModes = @(
-    @{ key = 'all';     label = 'All tasks' }
-    @{ key = 'manual';  label = 'Manual only' }
-    @{ key = 'outlook'; label = 'Outlook only' }
-    @{ key = 'urgent';  label = 'Urgent (high + critical)' }
-)
-foreach ($opt in $filterModes) {
-    $mi = New-Object System.Windows.Controls.MenuItem
-    $mi.Header = $opt.label
-    $mi.Tag = $opt.key
-    $mi.Add_Click({
-        param($s, $e)
-        $k = [string]$s.Tag
-        $Global:VigilSettings.activeFilter = $k
-        Save-VigilSettings $Global:VigilSettings
-        Refresh-Render
-    })
-    $filterMenu.Items.Add($mi) | Out-Null
-}
-$BtnFilter.Add_Click({
-    $filterMenu.PlacementTarget = $BtnFilter
-    $filterMenu.Placement = 'Bottom'
-    $filterMenu.IsOpen = $true
-})
-
-$sortMenu.Items.Add((New-Object System.Windows.Controls.Separator)) | Out-Null
-& $addHeader 'ACTIONS'
-
-$showDoneMi = New-Object System.Windows.Controls.MenuItem
-$showDoneMi.Header = 'Show completed tasks'
-$showDoneMi.IsCheckable = $true
-$showDoneMi.IsChecked = [bool]$Global:VigilSettings.showCompleted
-$showDoneMi.Add_Click({
-    $Global:VigilSettings.showCompleted = -not [bool]$Global:VigilSettings.showCompleted
+# Show-completed toggle button (top bar)
+$BtnShowDone.IsChecked = [bool]$Global:VigilSettings.showCompleted
+$BtnShowDone.Add_Click({
+    $Global:VigilSettings.showCompleted = [bool]$BtnShowDone.IsChecked
     Save-VigilSettings $Global:VigilSettings
     Refresh-Render
 })
-$sortMenu.Items.Add($showDoneMi) | Out-Null
+
+# Clickable badges = filter selectors (CAL / TASK / CRIT / HIGH)
+$badgeClick = {
+    param($s, $e)
+    $mode = [string]$s.Tag
+    if (-not $mode) { return }
+    if ([string]$Global:VigilSettings.activeFilter -eq $mode) {
+        $Global:VigilSettings.activeFilter = 'all'
+    } else {
+        $Global:VigilSettings.activeFilter = $mode
+    }
+    Save-VigilSettings $Global:VigilSettings
+    Refresh-Render
+}
+$CountCalBadge.Add_MouseLeftButtonUp($badgeClick)
+$CountTaskBadge.Add_MouseLeftButtonUp($badgeClick)
+$CountCritBadge.Add_MouseLeftButtonUp($badgeClick)
+$CountHighBadge.Add_MouseLeftButtonUp($badgeClick)
+
+$sortMenu.Items.Add((New-Object System.Windows.Controls.Separator)) | Out-Null
+& $addHeader 'ACTIONS'
 
 $exportMi = New-Object System.Windows.Controls.MenuItem
 $exportMi.Header = 'Copy all as markdown'
@@ -1788,7 +1802,7 @@ $quickAddXaml = @'
         TextOptions.TextFormattingMode="Ideal"
         TextOptions.TextRenderingMode="Grayscale"
         UseLayoutRounding="True" SnapsToDevicePixels="True"
-        FontFamily="Segoe UI"
+       
        
         WindowStartupLocation="Manual">
   <StackPanel Margin="20">

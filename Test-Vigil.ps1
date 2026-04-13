@@ -151,6 +151,15 @@ Assert-Count 2 (Filter-VigilTasks -tasks $filterFixture -mode 'manual') 'manual 
 Assert-Count 3 (Filter-VigilTasks -tasks $filterFixture -mode 'outlook') 'outlook = 3'
 Assert-Count 3 (Filter-VigilTasks -tasks $filterFixture -mode 'urgent')  'urgent (high+critical) = 3'
 
+# New badge-driven modes
+Assert-Count 1 (Filter-VigilTasks -tasks $filterFixture -mode 'cal')   'cal mode = only outlook-cal'
+Assert-Count 4 (Filter-VigilTasks -tasks $filterFixture -mode 'task')  'task mode = everything except outlook-cal'
+
+$critPast = New-VigilTask -Title 'overdue-task' -Priority 'normal' -DueDate (Get-Date).AddHours(-2)
+$critFix = $filterFixture + @($critPast)
+Assert-Count 2 (Filter-VigilTasks -tasks $critFix -mode 'crit')  'crit = critical priority + overdue'
+Assert-Count 2 (Filter-VigilTasks -tasks $critFix -mode 'high')  'high = only high priority'
+
 # --------------------------------------------------------------------------
 Section 'Format-DueLabel'
 # --------------------------------------------------------------------------
