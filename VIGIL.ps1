@@ -12,7 +12,7 @@ param()
 
 # Build stamp - bumped on every commit. Visible in status bar + vigil.log.
 # Format: YYYY-MM-DD HH:MM (UTC)  buildN
-$script:VigilVersion = '2026-04-13 22:30 UTC  build21 ascii-clean'
+$script:VigilVersion = '2026-04-13 23:15 UTC  build22 phase2-hotkey'
 
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName PresentationFramework
@@ -21,10 +21,9 @@ Add-Type -AssemblyName WindowsBase
 Add-Type -AssemblyName System.Security
 Add-Type -AssemblyName System.Windows.Forms
 
-# --- Single instance -------------------------------------------------------
-$script:Mutex = New-Object System.Threading.Mutex($false, 'Global\VIGIL_TaskTracker')
-if (-not $script:Mutex.WaitOne(0, $false)) {
-    Add-Type -TypeDefinition @"
+# --- Win32 P/Invoke (hotkey, window activation, foreground tracking) ------
+if (-not ([System.Management.Automation.PSTypeName]'VigilWin32').Type) {
+    Add-Type -ErrorAction Stop -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
 public class VigilWin32 {
@@ -32,8 +31,16 @@ public class VigilWin32 {
     public static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
     [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+    [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] public static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
+    [DllImport("user32.dll")] public static extern bool UnregisterHotKey(IntPtr hWnd, int id);
 }
-"@ -ErrorAction SilentlyContinue
+"@
+}
+
+# --- Single instance -------------------------------------------------------
+$script:Mutex = New-Object System.Threading.Mutex($false, 'Global\VIGIL_TaskTracker')
+if (-not $script:Mutex.WaitOne(0, $false)) {
     $h = [VigilWin32]::FindWindow($null, 'VIGIL')
     if ($h -ne [IntPtr]::Zero) {
         [VigilWin32]::ShowWindow($h, 9) | Out-Null
@@ -810,5 +817,262 @@ $window.Add_Closing({
 # --- Go --------------------------------------------------------------------
 $startMsg = 'VIGIL started. version={0}  tasks={1}' -f $script:VigilVersion, $script:Tasks.Count
 Write-VigilLog $startMsg
+
+# --- Phase 2: Quick-Add popup + global hotkey -----------------------------
+
+$quickAddXaml = @'
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="VIGIL - New task"
+        Width="460" SizeToContent="Height"
+        WindowStyle="None" ResizeMode="NoResize"
+        AllowsTransparency="True" Background="Transparent"
+        Topmost="True" ShowInTaskbar="False"
+        TextOptions.TextFormattingMode="Ideal"
+        TextOptions.TextRenderingMode="Grayscale"
+        UseLayoutRounding="True" SnapsToDevicePixels="True"
+        FontFamily="Segoe UI"
+        WindowStartupLocation="Manual">
+  <Border CornerRadius="16" Background="#0B0E14"
+          BorderBrush="#2A3245" BorderThickness="1" Margin="14">
+    <Border.Effect>
+      <DropShadowEffect Color="#000000" BlurRadius="40" ShadowDepth="0" Opacity="0.75"/>
+    </Border.Effect>
+    <StackPanel Margin="22,20,22,20">
+      <TextBlock Text="New task" FontSize="15" FontWeight="SemiBold"
+                 Foreground="#F0F2F7" Margin="0,0,0,12"/>
+      <Border Background="#1C2230" BorderBrush="#2A3245" BorderThickness="1"
+              CornerRadius="8">
+        <TextBox x:Name="TxtTitle" Background="Transparent" BorderThickness="0"
+                 Foreground="#F0F2F7" Padding="12,10" FontSize="14"
+                 CaretBrush="#7C5CFF" VerticalContentAlignment="Center"/>
+      </Border>
+      <TextBlock Text="PRIORITY" FontSize="10" FontWeight="Bold"
+                 Foreground="#555E70" Margin="2,16,0,6"/>
+      <StackPanel x:Name="PriorityRow" Orientation="Horizontal"/>
+      <TextBlock Text="DUE" FontSize="10" FontWeight="Bold"
+                 Foreground="#555E70" Margin="2,14,0,6"/>
+      <StackPanel x:Name="DueRow" Orientation="Horizontal"/>
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
+        <Button x:Name="BtnQCancel" Content="Cancel"
+                Background="Transparent" Foreground="#8A94A8" BorderThickness="0"
+                Padding="14,8" FontSize="12" Cursor="Hand"/>
+        <Button x:Name="BtnQSave" Content="Add task"
+                Background="#7C5CFF" Foreground="#FFFFFF" BorderThickness="0"
+                Padding="20,8" FontSize="12" FontWeight="SemiBold"
+                Margin="8,0,0,0" Cursor="Hand"/>
+      </StackPanel>
+    </StackPanel>
+  </Border>
+</Window>
+'@
+
+$script:QuickAddPriority = 'normal'
+$script:QuickAddDue      = ''
+$script:QuickAddPriBtns  = $null
+$script:QuickAddDueBtns  = $null
+
+function Update-QuickAddVisuals {
+    $accent  = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromRgb(124,92,255))
+    $elev    = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromRgb(28,34,48))
+    $txt     = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromRgb(240,242,247))
+    $txtDim  = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromRgb(138,148,168))
+    $bColor  = New-Object System.Windows.Media.SolidColorBrush([System.Windows.Media.Color]::FromRgb(42,50,69))
+
+    if ($script:QuickAddPriBtns) {
+        foreach ($p in $script:QuickAddPriBtns.Keys) {
+            $b = $script:QuickAddPriBtns[$p]
+            if ($p -eq $script:QuickAddPriority) {
+                $b.Background = $accent; $b.Foreground = $txt; $b.BorderBrush = $accent
+            } else {
+                $b.Background = $elev; $b.Foreground = $txtDim; $b.BorderBrush = $bColor
+            }
+        }
+    }
+    if ($script:QuickAddDueBtns) {
+        foreach ($k in $script:QuickAddDueBtns.Keys) {
+            $b = $script:QuickAddDueBtns[$k]
+            $matchTag = ($b.Tag -eq $script:QuickAddDue)
+            if ($matchTag) {
+                $b.Background = $accent; $b.Foreground = $txt; $b.BorderBrush = $accent
+            } else {
+                $b.Background = $elev; $b.Foreground = $txtDim; $b.BorderBrush = $bColor
+            }
+        }
+    }
+}
+
+function Show-QuickAdd {
+    try {
+        $prevFg = [VigilWin32]::GetForegroundWindow()
+
+        $clip = ''
+        try { $clip = [System.Windows.Clipboard]::GetText() } catch {}
+        if ($clip) {
+            $clip = $clip.Trim() -replace '\s+', ' '
+            if ($clip.Length -gt 200) { $clip = $clip.Substring(0, 200) }
+        }
+
+        [xml]$qx = $quickAddXaml
+        $qreader = New-Object System.Xml.XmlNodeReader $qx
+        $qwin = [Windows.Markup.XamlReader]::Load($qreader)
+
+        $txtTitle  = $qwin.FindName('TxtTitle')
+        $priRow    = $qwin.FindName('PriorityRow')
+        $dueRow    = $qwin.FindName('DueRow')
+        $btnSave   = $qwin.FindName('BtnQSave')
+        $btnCancel = $qwin.FindName('BtnQCancel')
+
+        $script:QuickAddPriority = 'normal'
+        $script:QuickAddDue      = ''
+        $script:QuickAddPriBtns  = @{}
+        $script:QuickAddDueBtns  = @{}
+
+        # Priority pills
+        foreach ($p in @('low','normal','high','critical')) {
+            $btn = New-Object System.Windows.Controls.Button
+            $btn.Content = $p.Substring(0,1).ToUpper() + $p.Substring(1)
+            $btn.Margin = New-Object System.Windows.Thickness(0,0,6,0)
+            $btn.Padding = New-Object System.Windows.Thickness(14,7,14,7)
+            $btn.FontSize = 12
+            $btn.BorderThickness = New-Object System.Windows.Thickness(1)
+            $btn.Cursor = [System.Windows.Input.Cursors]::Hand
+            $btn.Tag = $p
+            $btn.Add_Click({
+                $script:QuickAddPriority = $this.Tag
+                Update-QuickAddVisuals
+            })
+            $script:QuickAddPriBtns[$p] = $btn
+            [void]$priRow.Children.Add($btn)
+        }
+
+        # Due pills
+        $nowDate = (Get-Date).Date
+        $daysToFri = (([int][System.DayOfWeek]::Friday) - [int]$nowDate.DayOfWeek + 7) % 7
+        if ($daysToFri -eq 0) { $daysToFri = 7 }
+        $dueChoices = @(
+            @{ key = '';                                                       label = 'None' }
+            @{ key = $nowDate.AddHours(17).ToString('o');                      label = 'Today 5pm' }
+            @{ key = $nowDate.AddDays(1).AddHours(9).ToString('o');            label = 'Tomorrow 9am' }
+            @{ key = $nowDate.AddDays($daysToFri).AddHours(17).ToString('o');  label = 'This week' }
+        )
+        foreach ($d in $dueChoices) {
+            $btn = New-Object System.Windows.Controls.Button
+            $btn.Content = $d.label
+            $btn.Margin = New-Object System.Windows.Thickness(0,0,6,0)
+            $btn.Padding = New-Object System.Windows.Thickness(14,7,14,7)
+            $btn.FontSize = 12
+            $btn.BorderThickness = New-Object System.Windows.Thickness(1)
+            $btn.Cursor = [System.Windows.Input.Cursors]::Hand
+            $btn.Tag = $d.key
+            $btn.Add_Click({
+                $script:QuickAddDue = $this.Tag
+                Update-QuickAddVisuals
+            })
+            $script:QuickAddDueBtns[$d.label] = $btn
+            [void]$dueRow.Children.Add($btn)
+        }
+
+        Update-QuickAddVisuals
+
+        # Position on active monitor
+        $pt = [System.Windows.Forms.Cursor]::Position
+        $scr = [System.Windows.Forms.Screen]::FromPoint($pt).WorkingArea
+        $qwin.Left = $scr.X + (($scr.Width  - 460) / 2)
+        $qwin.Top  = $scr.Y + (($scr.Height - 320) / 2)
+
+        if ($clip) {
+            $txtTitle.Text = $clip
+            $txtTitle.SelectAll()
+        }
+
+        $saveAction = {
+            $t = $txtTitle.Text
+            if ($t) { $t = $t.Trim() }
+            if (-not $t) { return }
+            $task = New-VigilTask -Title $t -Priority $script:QuickAddPriority
+            if ($script:QuickAddDue) { $task.dueDate = $script:QuickAddDue }
+            $script:Tasks = @($script:Tasks) + @($task)
+            Save-VigilTasks $script:Tasks
+            Refresh-Render
+            $qwin.Close()
+        }.GetNewClosure()
+
+        $btnSave.Add_Click($saveAction)
+        $btnCancel.Add_Click({ $qwin.Close() }.GetNewClosure())
+
+        $txtTitle.Add_KeyDown({
+            param($s, $e)
+            if ($e.Key -eq 'Return') { & $saveAction; $e.Handled = $true }
+            elseif ($e.Key -eq 'Escape') { $qwin.Close(); $e.Handled = $true }
+        }.GetNewClosure())
+
+        $qwin.Add_KeyDown({
+            param($s, $e)
+            if ($e.Key -eq 'Escape') { $qwin.Close(); $e.Handled = $true }
+        }.GetNewClosure())
+
+        $qwin.Add_Closed({
+            if ($prevFg -ne [IntPtr]::Zero) {
+                [VigilWin32]::SetForegroundWindow($prevFg) | Out-Null
+            }
+        }.GetNewClosure())
+
+        $qwin.Show()
+        $qwin.Activate() | Out-Null
+        $txtTitle.Focus() | Out-Null
+    } catch {
+        $emsg = 'Show-QuickAdd FAILED: {0}' -f $_.Exception.Message
+        Write-VigilLog $emsg
+    }
+}
+
+# --- Global hotkey registration (Ctrl+Win+A) ------------------------------
+
+$script:HotkeyId = 9001
+$script:HotkeyRegistered = $false
+
+$window.Add_Loaded({
+    try {
+        $helper = New-Object System.Windows.Interop.WindowInteropHelper($window)
+        $hwnd = $helper.Handle
+        $MOD_CONTROL = 0x0002
+        $MOD_WIN     = 0x0008
+        $VK_A        = 0x41
+        $mods = [uint32]($MOD_CONTROL -bor $MOD_WIN)
+        $ok = [VigilWin32]::RegisterHotKey($hwnd, $script:HotkeyId, $mods, [uint32]$VK_A)
+        if ($ok) {
+            $script:HotkeyRegistered = $true
+            Write-VigilLog 'Hotkey registered: Ctrl+Win+A'
+            $src = [System.Windows.Interop.HwndSource]::FromHwnd($hwnd)
+            $hook = [System.Windows.Interop.HwndSourceHook]{
+                param($h, $msg, $wp, $lp, $handled)
+                if ($msg -eq 0x0312 -and $wp.ToInt32() -eq 9001) {
+                    try { Show-QuickAdd } catch {
+                        $em = 'Hotkey handler error: ' + $_.Exception.Message
+                        Write-VigilLog $em
+                    }
+                }
+                return [IntPtr]::Zero
+            }
+            $src.AddHook($hook)
+        } else {
+            Write-VigilLog 'Hotkey registration FAILED - Ctrl+Win+A may already be in use'
+        }
+    } catch {
+        $em = 'Hotkey setup error: ' + $_.Exception.Message
+        Write-VigilLog $em
+    }
+})
+
+$window.Add_Closing({
+    if ($script:HotkeyRegistered) {
+        try {
+            $helper = New-Object System.Windows.Interop.WindowInteropHelper($window)
+            [void][VigilWin32]::UnregisterHotKey($helper.Handle, $script:HotkeyId)
+        } catch {}
+    }
+})
+
 Refresh-Render
 [void]$window.ShowDialog()
