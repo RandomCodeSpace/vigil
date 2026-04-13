@@ -13,7 +13,7 @@ param(
 
 # Build stamp - bumped on every commit. Visible in status bar + vigil.log.
 # Format: YYYY-MM-DD HH:MM (UTC)  buildN
-$script:VigilVersion = '2026-04-14 03:10 UTC  build33 phase5-features'
+$script:VigilVersion = '2026-04-14 03:10 UTC  build34 test-clock-safe'
 
 $ErrorActionPreference = 'Stop'
 
