@@ -13,7 +13,7 @@ param(
 
 # Build stamp - bumped on every commit. Visible in status bar + vigil.log.
 # Format: YYYY-MM-DD HH:MM (UTC)  buildN
-$script:VigilVersion = '2026-04-14 03:10 UTC  build41 dwm-extend-frame'
+$script:VigilVersion = '2026-04-14 03:10 UTC  build42 mica-see-through-chrome'
 
 $ErrorActionPreference = 'Stop'
 
@@ -1841,19 +1841,38 @@ $window.Add_Loaded({
         $dark = 1
         [void][VigilWin32]::DwmSetWindowAttribute($h, 20, [ref]$dark, 4)
         if ($script:HasFluent) {
+            # Check Windows system transparency preference - Mica is invisible if off
+            $transOn = 1
+            try {
+                $kT = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize'
+                $transOn = (Get-ItemProperty -Path $kT -Name EnableTransparency -ErrorAction Stop).EnableTransparency
+            } catch {}
+            Write-VigilLog ('Fluent: EnableTransparency reg = {0}' -f $transOn)
+
             # Mica needs an extended frame to draw on. Sheet-of-glass = (-1,-1,-1,-1).
             $margins = New-Object VigilMargins
             $margins.cxLeftWidth = -1
             $margins.cxRightWidth = -1
             $margins.cyTopHeight = -1
             $margins.cyBottomHeight = -1
-            [void][VigilWin32]::DwmExtendFrameIntoClientArea($h, [ref]$margins)
+            $efRc = [VigilWin32]::DwmExtendFrameIntoClientArea($h, [ref]$margins)
+            Write-VigilLog ('Fluent: DwmExtendFrame rc = 0x{0:X}' -f $efRc)
+
             # DWMSBT_MAINWINDOW = 2 -> Mica backdrop tinted by desktop wallpaper
             $backdrop = 2
             $rc = [VigilWin32]::DwmSetWindowAttribute($h, 38, [ref]$backdrop, 4)
             if ($rc -eq 0) {
                 Write-VigilLog 'Fluent: Mica backdrop applied'
-                if ($FluentLabel) { $FluentLabel.Text = 'MICA' }
+                # Semi-transparent chrome so Mica is visible through title/add/status bars
+                $chromeBrush = New-Object System.Windows.Media.SolidColorBrush(
+                    [System.Windows.Media.Color]::FromArgb(140, 22, 22, 22))
+                try { $TitleBar.Background   = $chromeBrush } catch {}
+                try { $AddArea.Background    = $chromeBrush } catch {}
+                try { $StatusArea.Background = $chromeBrush } catch {}
+                if ($FluentLabel) {
+                    if ($transOn -eq 0) { $FluentLabel.Text = 'MICA(t:off)' }
+                    else { $FluentLabel.Text = 'MICA' }
+                }
             } else {
                 $rcMsg = 'Fluent: Mica DWM call returned 0x{0:X}' -f $rc
                 Write-VigilLog $rcMsg
