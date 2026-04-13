@@ -1,3 +1,12 @@
+# Plan / design / review scratch docs (keep local, never commit)
+PLAN*.md
+CODE_REVIEW*.md
+UI_*.md
+PREFLIGHT_*.md
+DESIGN*.md
+NOTES.md
+SCRATCH*.md
+
 # VIGIL runtime data (never commit user task data)
 .vigil/
 tasks.json
