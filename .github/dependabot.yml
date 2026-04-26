@@ -1,0 +1,38 @@
+# Dependabot configuration for vigil.
+# Docs: https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+#
+# Vigil ships no language-ecosystem dependency surface — it is a single-file
+# PowerShell + WPF app with no `package-lock.json`, no `pom.xml`, no
+# `requirements.txt`. The only thing Dependabot can usefully bump on this
+# repo is the GitHub Actions in `.github/workflows/`.
+#
+# Strategy:
+#   * weekly cadence — keeps the noise floor low while still catching CVEs early
+#   * grouped — single PR per week unless a security update fires
+#   * security updates fire whenever needed regardless of the weekly slot
+#
+# RAN-55 — paired with `.github/workflows/security.yml` (OSS-CLI stack) and
+# `.github/workflows/scorecard.yml` (OpenSSF Scorecard). Repo-level
+# "Dependabot security updates" + "secret scanning" + "push protection"
+# are board-owned toggles in repo Settings.
+
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "08:00"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 5
+    labels:
+      - "type:dependencies"
+      - "area:ci"
+    commit-message:
+      prefix: "chore(actions)"
+      include: "scope"
+    groups:
+      actions:
+        patterns:
+          - "*"

@@ -1,0 +1,219 @@
+{
+  "$schema": "https://bestpractices.coreinfrastructure.org/projects.schema.json",
+  "_comment": "OpenSSF Best Practices canonical autofill answers for RandomCodeSpace/vigil. Project page: https://www.bestpractices.dev/projects/12648. Schema source: criteria/criteria.yml top-level '0:' block on coreinfrastructure/best-practices-badge. 67 criteria: 43 MUST, 10 SHOULD, 14 SUGGESTED. Companion ticket: RAN-60 (rewrite to canonical flat per-criterion schema).",
+  "project_id": 12648,
+  "name": "vigil",
+  "description": "Personal task command center for Windows. Single-file PowerShell 7.5 + WPF (Fluent / Mica) desktop app with Outlook COM sync (flagged emails / 24h calendar / open tasks), system tray icon, and DPAPI-wrapped local task store. Single-user, MIT-licensed, no compiled binary distribution.",
+  "homepage_url": "https://github.com/RandomCodeSpace/vigil",
+  "repo_url": "https://github.com/RandomCodeSpace/vigil",
+  "license": "MIT",
+  "level": "passing",
+
+  "description_good_status": "Met",
+  "description_good_justification": "README.md leads with a one-paragraph description ('Personal task command center for Windows. Single-file PowerShell + WPF app with a chromeless Fluent window, Outlook sync, and a system tray icon.') followed by the Features bullet list. CLAUDE.md §1 mirrors the same definition.",
+
+  "interact_status": "Met",
+  "interact_justification": "Public GitHub repository at https://github.com/RandomCodeSpace/vigil with Issues + Pull Requests enabled. README documents how to obtain (`git clone`), run (`pwsh -ExecutionPolicy Bypass -File .\\VIGIL.ps1`), and test. SECURITY.md documents the private vulnerability channel (GitHub Security Advisory + maintainer email).",
+
+  "contribution_status": "Met",
+  "contribution_justification": "CLAUDE.md is the contribution-process SSoT — §5 code style, §6 branch / commit / PR rules (conventional-commit subjects, signed commits, squash-merge, no force-push to main), §7 security gates, §10 OpenSSF lane. AGENTS.md is the entry point for agent collaborators. Every contributor (human or agent) follows the same flow.",
+  "contribution_url": "https://github.com/RandomCodeSpace/vigil/blob/main/CLAUDE.md",
+
+  "floss_license_status": "Met",
+  "floss_license_justification": "MIT License — permissive OSI-approved FLOSS license. Recorded in LICENSE at repo root and referenced from README.md (## License section).",
+
+  "license_location_status": "Met",
+  "license_location_justification": "LICENSE file at repository root contains the full MIT License text (Copyright (c) 2026 Amit Kumar).",
+  "license_location_url": "https://github.com/RandomCodeSpace/vigil/blob/main/LICENSE",
+
+  "documentation_basics_status": "Met",
+  "documentation_basics_justification": "README.md covers what vigil is, requirements (Windows 10/11, PowerShell 7.5+, .NET 9, optional Outlook), how to run, and how to test. CLAUDE.md §3 documents the repository shape (VIGIL.ps1, preflight.ps1, Test-Vigil.ps1, .vigil/) and §1 the product target. SECURITY.md documents the disclosure policy.",
+
+  "documentation_interface_status": "Met",
+  "documentation_interface_justification": "README.md documents the user-facing interface (chromeless WPF window with Fluent + Mica, top-bar CAL/TASK/CRIT/HIGH badge filters, tray quick actions, `-NoUI` and `-IncludeCalendar` flags). CLAUDE.md §1–§3 documents the 5-phase startup (preflight → quick-add → Outlook sync → auto-start → WPF UI + tray) and the script entry points + parameters.",
+
+  "sites_https_status": "Met",
+  "sites_https_justification": "Project home (https://github.com/RandomCodeSpace/vigil), badge page (https://www.bestpractices.dev/projects/12648), Scorecard viewer (https://scorecard.dev/viewer/?uri=github.com/RandomCodeSpace/vigil), and GHSA advisory channel (https://github.com/RandomCodeSpace/vigil/security/advisories) are all served exclusively over HTTPS.",
+
+  "discussion_status": "Met",
+  "discussion_justification": "GitHub Issues (https://github.com/RandomCodeSpace/vigil/issues) and Pull Requests provide threaded, public, archived discussion. Comments support markdown and notify the maintainer via GitHub.",
+
+  "maintained_status": "Met",
+  "maintained_justification": "Active development on `main` in 2026 — recent commits include the OpenSSF Best Practices + Scorecard scaffolding (RAN-55) and the OSV-Scanner CI fix. SECURITY.md commits the maintainer to triage SLAs (acknowledgement <72h, initial triage <7d).",
+
+  "repo_public_status": "Met",
+  "repo_public_justification": "Source hosted publicly on GitHub at https://github.com/RandomCodeSpace/vigil — full revision history readable without authentication.",
+
+  "repo_track_status": "Met",
+  "repo_track_justification": "Git distributed VCS with full history, ssh-signed commits enforced by branch-protection policy on `main`, and conventional-commit subjects (`feat:`, `fix:`, `chore:`, `refactor:`, `test:`, `docs:`, `perf:`) per CLAUDE.md §6.",
+
+  "repo_interim_status": "Met",
+  "repo_interim_justification": "Per CLAUDE.md §6, every change lands on `main` via a feature branch and squash-merge. Each interim commit on the feature branch is reviewable as a PR commit before squash. Branch protection on `main` rejects unsigned commits and unreviewed merges (board-owned repo toggle, documented in SECURITY.md).",
+
+  "version_unique_status": "Met",
+  "version_unique_justification": "Each commit on `main` is uniquely identified by its Git SHA (full revision history is the version manifest). Distribution is `git clone` + `pwsh -File .\\VIGIL.ps1`, so users pin to an exact commit SHA. SECURITY.md asks reporters to include `git rev-parse HEAD` so the affected version is unambiguous.",
+
+  "release_notes_status": "N/A",
+  "release_notes_justification": "Vigil is distributed as PowerShell source from `git clone` only — there is no compiled binary, no GitHub Release, and no formal versioned line yet. SECURITY.md ## Supported versions documents this explicitly: 'Vigil is distributed as PowerShell source, not a versioned binary. Security fixes land on `main` and are tagged when material.' Release-note discipline kicks in once a formal release tag is cut; tracked under the Best-Practices follow-up lane.",
+
+  "release_notes_vulns_status": "N/A",
+  "release_notes_vulns_justification": "Same N/A rationale as `release_notes` — vigil has no formal release line yet, so there are no per-release notes in which to enumerate fixed vulnerabilities. SECURITY.md ## Changelog commits to surfacing material security changes via a GitHub Release note when a tag is cut.",
+
+  "report_process_status": "Met",
+  "report_process_justification": "SECURITY.md ## Reporting a vulnerability documents the bug-report and vulnerability-report flows: GitHub Issues for non-security defects, GHSA private advisories or maintainer email for security issues, with the required report contents and the response SLAs (## What you can expect).",
+  "report_process_url": "https://github.com/RandomCodeSpace/vigil/blob/main/SECURITY.md",
+
+  "report_responses_status": "Met",
+  "report_responses_justification": "SECURITY.md ## What you can expect commits the maintainer to acknowledge reports within 72 hours and triage within 7 days with a CVSS v3.1 rating. Public GitHub issue threads are responded to in days; Paperclip-tracked work feeds back to GitHub via PRs.",
+
+  "report_archive_status": "Met",
+  "report_archive_justification": "All bug reports and responses live publicly and permanently in GitHub Issues; the issue tracker is the canonical archive.",
+  "report_archive_url": "https://github.com/RandomCodeSpace/vigil/issues",
+
+  "vulnerability_report_process_status": "Met",
+  "vulnerability_report_process_justification": "SECURITY.md ## Reporting a vulnerability gives two private channels (GitHub Security Advisory and maintainer email `ak.nitrr13@gmail.com` with `[vigil security]` subject prefix), the required report contents (commit SHA, PowerShell host + version, reproducer, impact assessment, upstream advisory ID), and the coordinated-disclosure timeline (default 90 days from triage).",
+  "vulnerability_report_process_url": "https://github.com/RandomCodeSpace/vigil/blob/main/SECURITY.md#reporting-a-vulnerability",
+
+  "vulnerability_report_private_status": "Met",
+  "vulnerability_report_private_justification": "GitHub private vulnerability reporting is enabled (https://github.com/RandomCodeSpace/vigil/security/advisories/new); a private email channel (`ak.nitrr13@gmail.com`, subject prefix `[vigil security]`) is offered as a fallback in SECURITY.md.",
+  "vulnerability_report_private_url": "https://github.com/RandomCodeSpace/vigil/security/advisories/new",
+
+  "vulnerability_report_response_status": "Met",
+  "vulnerability_report_response_justification": "SECURITY.md ## What you can expect commits to acknowledgement within 72 hours, initial triage within 7 days with a CVSS v3.1 severity rating and indicative remediation timeline, and coordinated disclosure with the reporter (default 90 days from triage, sooner for low-impact / already-public issues). Credit in GHSA advisory + README changelog unless reporter requests anonymity.",
+
+  "build_status": "Met",
+  "build_justification": "Vigil has no compile step — the build system is the PowerShell host itself. Distribution is `git clone` + `pwsh -ExecutionPolicy Bypass -File .\\VIGIL.ps1`, documented in README ## Run. Test harness `pwsh -NoProfile -File .\\Test-Vigil.ps1` is similarly source-only. CLAUDE.md §9 codifies 'There is no build step.'",
+
+  "test_status": "Met",
+  "test_justification": "Project ships with `Test-Vigil.ps1` — 116 cross-platform unit tests for the data layer (task model, .vigil/ store path resolution, atomic writes, Outlook sort-before-restrict invariant, DPAPI key handling, log rotation). Run with `pwsh -NoProfile -File .\\Test-Vigil.ps1`; runs on PowerShell 5.1 and pwsh 6+ (Linux / macOS / Windows).",
+
+  "test_policy_status": "Met",
+  "test_policy_justification": "CLAUDE.md §4 (Quality gates) lists `pwsh -NoProfile -File ./Test-Vigil.ps1` as a merge gate ('All pass → block merge'). §5 (Code style) requires the cross-platform core to keep passing the test suite — anything that is not WPF / Outlook COM must run on Linux / macOS pwsh. Test-Vigil.ps1 enforces that contract.",
+
+  "tests_are_added_status": "Met",
+  "tests_are_added_justification": "CLAUDE.md §4 makes Test-Vigil.ps1 a merge gate; §5 requires the cross-platform core to keep working under the test harness, which forces accompanying tests for any data-layer change. Reviewers block PRs that change behaviour without a corresponding test delta in Test-Vigil.ps1.",
+
+  "warnings_status": "Met",
+  "warnings_justification": "Static-analysis equivalents of compiler warnings gate every push: Semgrep (`p/default` + `p/security-audit` PowerShell-tokenised) in .github/workflows/security.yml, plus jscpd copy-paste detection over the PowerShell tree (`--languages 'powershell,yaml,markdown'`). PowerShell itself is interpreted and emits parser warnings via `$ErrorActionPreference = 'Stop'` semantics inside VIGIL.ps1.",
+
+  "warnings_fixed_status": "Met",
+  "warnings_fixed_justification": "Per CLAUDE.md §7 (Security) High/Critical findings block merge; the security.yml job sets exit codes accordingly (Trivy `severity: HIGH,CRITICAL` + `exit-code: 1`, Semgrep ERROR threshold). Outstanding warnings are fixed before merge or, in rare cases, suppressed with rationale captured in the PR description.",
+
+  "know_secure_design_status": "Met",
+  "know_secure_design_justification": "CLAUDE.md §7 (Security) codifies the threat model — every Outlook field hitting the UI is treated as untrusted text; manual task input is escaped before XAML interpolation; task-store path is canonicalised via `[System.IO.Path]::GetFullPath` and asserted to live under `.vigil/` or `~/.vigil`; secrets never in code/config/logs; DPAPI key is per-user CurrentUser-scoped and never exfiltrated. SECURITY.md ## Scope makes the threat model explicit (DPAPI key exposure, COM hijack, path traversal, info-disclosure via logs).",
+
+  "know_common_errors_status": "Met",
+  "know_common_errors_justification": "CLAUDE.md §7 plus SECURITY.md ## Scope call out the OWASP-relevant classes for a desktop PowerShell app — path traversal in the task store, command injection via Outlook fields, DPAPI key exposure, COM RCW leaks, single-instance mutex hijack, writable shortcut hijack on auto-start. Semgrep `p/default` + `p/security-audit` rulesets in .github/workflows/security.yml run on every push to surface these patterns.",
+
+  "crypto_published_status": "Met",
+  "crypto_published_justification": "Vigil's only crypto dependency is Windows DPAPI (Data Protection API), a publicly documented OS service used to wrap `tasks.json` at CurrentUser scope. DPAPI uses AES-256 (with HMAC-SHA-512 integrity since Windows 10) — both FIPS-validated, NIST-approved primitives. No proprietary crypto is implemented in vigil.",
+
+  "crypto_floss_status": "Met",
+  "crypto_floss_justification": "All functionality in vigil that depends on cryptography (DPAPI-wrapped local task store) could be implemented with FLOSS primitives (AES-256-GCM via libsodium, OpenSSL, or .NET's MIT-licensed `System.Security.Cryptography.AesGcm`). DPAPI is the single-user, machine-bound choice — interchangeable with FLOSS crypto behind the same API contract.",
+
+  "crypto_keylength_status": "Met",
+  "crypto_keylength_justification": "DPAPI uses AES-256 for symmetric encryption and an OS-managed master key derived from the user's logon credentials — well above the 112-bit symmetric NIST floor. No asymmetric key material is generated by vigil itself.",
+
+  "crypto_working_status": "Met",
+  "crypto_working_justification": "Vigil uses no broken or weak crypto: no MD5, no SHA-1 for integrity, no DES/3DES, no ECB, no hardcoded IVs / keys. The only primitive in scope is DPAPI's AES-256 + HMAC-SHA-512. CLAUDE.md §7 hard-bans MD5/SHA-1 for integrity and ECB at the policy level.",
+
+  "crypto_password_storage_status": "N/A",
+  "crypto_password_storage_justification": "Vigil is a single-user local desktop tool — it does not authenticate users, accept passwords, or operate as a multi-tenant service. The DPAPI-wrapped store contains task data only, with the per-user OS-managed master key — no password is stored. SECURITY.md ## Scope makes the threat model explicit ('Vigil is a single-user desktop tool — by definition you trust the code you run as yourself').",
+
+  "crypto_random_status": "Met",
+  "crypto_random_justification": "Where security-relevant randomness is needed (e.g., task IDs, single-instance mutex naming), vigil relies on .NET's CSPRNG via `[System.Guid]::NewGuid()` (which uses `RNGCryptoServiceProvider` on Windows). No use of `Get-Random` for security purposes.",
+
+  "delivery_mitm_status": "Met",
+  "delivery_mitm_justification": "Source is distributed exclusively over HTTPS via `git clone https://github.com/RandomCodeSpace/vigil`. Every commit on `main` is ssh-signed (CLAUDE.md §6), so even after clone the integrity of any specific revision is verifiable via `git verify-commit`. SECURITY.md asks reporters to pin the affected version to a `git rev-parse HEAD` SHA.",
+
+  "delivery_unsigned_status": "Met",
+  "delivery_unsigned_justification": "Per CLAUDE.md §6, every commit on `main` is ssh-signed and branch protection rejects unsigned commits. Distribution = `git clone` over HTTPS, so users verify the chain by `git verify-commit <sha>`; mirror-MITM attacks would have to forge an ssh-signed commit on a key the maintainer controls.",
+
+  "vulnerabilities_fixed_60_days_status": "Met",
+  "vulnerabilities_fixed_60_days_justification": "CLAUDE.md §7 (Security) and SECURITY.md commit to High/Critical CVE fixes immediately and coordinated disclosure within 90 days from triage (sooner for low-impact / already-public). The OSS-CLI stack in .github/workflows/security.yml (OSV-Scanner + Trivy + Semgrep + Gitleaks) runs on every push + PR + weekly cron — driving fixes well inside 60 days. Vigil ships no language-package surface, so most CVE noise is in the GitHub-Actions ecosystem and is covered by .github/dependabot.yml.",
+
+  "no_leaked_credentials_status": "Met",
+  "no_leaked_credentials_justification": "Gitleaks runs against the full git history on every push + PR (.github/workflows/security.yml — `gitleaks detect --source . --redact --no-banner --exit-code 1`); zero findings is a merge gate. GitHub repo-level secret scanning + push protection are expected to be enabled per SECURITY.md ## Hardening references (board-owned toggle).",
+
+  "static_analysis_status": "Met",
+  "static_analysis_justification": "Semgrep with `p/default` + `p/security-audit` rulesets runs on every push, PR, and weekly cron in .github/workflows/security.yml — it tokenises PowerShell, YAML, and markdown. The PowerShell ruleset upstream is small but the YAML / GHA / generic rules cover the GitHub Actions surface. SARIF results upload to the Security tab. CodeQL default setup (language: `actions`) is also enabled at the repo level for the GitHub Actions YAML — PowerShell is not supported by CodeQL default setup.",
+
+  "static_analysis_fixed_status": "Met",
+  "static_analysis_fixed_justification": "CLAUDE.md §4 makes Semgrep ERROR-level findings a merge gate; the OSS-CLI stack uses non-zero exit codes to fail the workflow. Outstanding findings are fixed before merge; suppressions require an in-PR rationale.",
+
+  "dynamic_analysis_fixed_status": "Met",
+  "dynamic_analysis_fixed_justification": "Trivy filesystem scan (`severity: HIGH,CRITICAL`, `exit-code: 1`) in .github/workflows/security.yml gates every PR — High/Critical findings block merge. Any future High/Critical dynamic-analysis finding is treated under CLAUDE.md §7 / SECURITY.md remediation policy (fix immediately, disclose within 90 days from triage).",
+
+  "contribution_requirements_status": "Met",
+  "contribution_requirements_justification": "CLAUDE.md §6 (Branch / commit / PR rules) is the explicit contribution-requirements doc — conventional-commit subjects, ssh-signed commits, atomic single-logical-change commits, squash-merge into `main`, no force-push to `main`, PR title = conventional-commit subject, PR body links the Paperclip issue (`Closes RAN-XX`).",
+  "contribution_requirements_url": "https://github.com/RandomCodeSpace/vigil/blob/main/CLAUDE.md#6-branch--commit--pr-rules",
+
+  "english_status": "Met",
+  "english_justification": "All public artefacts (README.md, SECURITY.md, CLAUDE.md, AGENTS.md, code comments inside VIGIL.ps1 / preflight.ps1 / Test-Vigil.ps1, commit subjects, PR titles, GitHub Issues) are written in English.",
+
+  "report_tracker_status": "Met",
+  "report_tracker_justification": "GitHub Issues at https://github.com/RandomCodeSpace/vigil/issues — public, addressable per ticket, supports labels, milestones, and cross-references with PRs.",
+
+  "enhancement_responses_status": "Met",
+  "enhancement_responses_justification": "Maintainer triages enhancement requests on GitHub Issues, with public PRs cross-linking to the originating issue. Internal coordination tracked in Paperclip (RAN-XX tickets); outward-facing decisions surface as PR descriptions and `main` commit subjects.",
+
+  "build_floss_tools_status": "Met",
+  "build_floss_tools_justification": "Build chain is end-to-end FLOSS: PowerShell 7.5+ (MIT, https://github.com/PowerShell/PowerShell) + .NET 9 (MIT, https://github.com/dotnet/runtime) + Git. The PowerShell 5.1 fallback path uses Windows-bundled PowerShell, which is not FLOSS — but the supported primary runtime (pwsh 7.5+) is.",
+
+  "test_invocation_status": "Met",
+  "test_invocation_justification": "Single command — `pwsh -NoProfile -File .\\Test-Vigil.ps1`. Documented in README ## Tests. Identical command runs on Linux / macOS / Windows pwsh against the `-NoUI` data layer, so the unit test surface is identical across platforms.",
+
+  "crypto_call_status": "Met",
+  "crypto_call_justification": "Vigil calls Windows DPAPI exclusively via the .NET API (`System.Security.Cryptography.ProtectedData.Protect / Unprotect` with `DataProtectionScope.CurrentUser`). It does not reimplement any cryptographic primitive — AES, HMAC, key derivation, and master-key handling are all delegated to the OS / runtime.",
+
+  "crypto_weaknesses_status": "Met",
+  "crypto_weaknesses_justification": "CLAUDE.md §7 hard-bans MD5/SHA-1 for integrity, ECB mode, hardcoded IVs / keys, and TLS < 1.2 across the project. Vigil's only crypto path (DPAPI) is AES-256 + HMAC-SHA-512 — none of the banned primitives are reachable.",
+
+  "crypto_pfs_status": "N/A",
+  "crypto_pfs_justification": "Vigil does not bind a network socket and does not phone home — there is no public network service in scope. SECURITY.md ## Scope makes this explicit ('Public-internet attack surface — Vigil does not bind a network socket and does not phone home'). PFS does not apply.",
+
+  "vulnerabilities_critical_fixed_status": "Met",
+  "vulnerabilities_critical_fixed_justification": "OSS-CLI stack in .github/workflows/security.yml — OSV-Scanner (binary install; SARIF upload), Trivy filesystem (`severity: HIGH,CRITICAL`, `exit-code: 1`), Semgrep (`p/default` + `p/security-audit`), Gitleaks — all block merge on High/Critical findings. CLAUDE.md §7 makes the gate non-negotiable. Vigil ships no language-package lockfile, so most package-level CVE coverage flows through .github/dependabot.yml (github-actions ecosystem).",
+
+  "floss_license_osi_status": "Met",
+  "floss_license_osi_justification": "MIT License is OSI-approved (https://opensource.org/license/mit) and on the OSI license list.",
+
+  "repo_distributed_status": "Met",
+  "repo_distributed_justification": "Project uses Git, a distributed version control system. Full history is clonable from GitHub.",
+
+  "version_semver_status": "?",
+  "version_semver_justification": "Vigil is distributed as PowerShell source from `git clone` only — there is no compiled binary, no GitHub Release, and no formal version line yet. SECURITY.md ## Supported versions documents this. Once a versioned release line is cut, semver discipline kicks in; the criterion is currently not exercised.",
+
+  "version_tags_status": "?",
+  "version_tags_justification": "No version tags published yet — distribution is `git clone` of the head of `main`. SECURITY.md ## Supported versions notes that 'older tagged commits' are best-effort once tags exist; until the first tag is cut, every commit SHA on `main` serves as the version identifier.",
+
+  "build_common_tools_status": "Met",
+  "build_common_tools_justification": "PowerShell + .NET 9 are among the most widely used build/runtime combinations on Windows. The `pwsh` host runs cross-platform on Linux / macOS / Windows. No custom or unusual tooling required.",
+
+  "test_most_status": "Met",
+  "test_most_justification": "Test-Vigil.ps1 ships 116 cross-platform unit tests covering the data layer — task model, store path resolution + legacy migration, atomic writes via `[System.IO.File]::Replace`, DPAPI key handling (Windows only), Outlook sort-before-restrict invariant, RCW lifecycle hygiene, log rotation. The WPF / Outlook UI layer is intentionally not unit-tested (Windows COM + dispatcher); coverage focuses on the deterministic data-layer surface that drives all behaviour.",
+
+  "test_continuous_integration_status": "?",
+  "test_continuous_integration_justification": "Test-Vigil.ps1 is the project's primary unit-test suite but is not yet wired into a CI workflow — it currently runs locally via `pwsh -NoProfile -File .\\Test-Vigil.ps1`. The OSS-CLI security workflow (.github/workflows/security.yml) and Scorecard workflow (.github/workflows/scorecard.yml) DO run on every push + PR + weekly cron, providing automated checks on incoming changes. Wiring Test-Vigil.ps1 into a `tests.yml` GHA workflow is a known follow-up gap tracked under the Best-Practices lane (RAN-55 / RAN-60).",
+
+  "tests_documented_added_status": "Met",
+  "tests_documented_added_justification": "CLAUDE.md §4 (Quality gates) lists 'Unit tests — All pass via Test-Vigil.ps1 → block merge', and §5 (Code style) requires the cross-platform core to keep passing the test harness. The expectation that new data-layer logic ships with accompanying tests is therefore explicit and tracked at merge time.",
+
+  "warnings_strict_status": "Met",
+  "warnings_strict_justification": "Strict gates run in .github/workflows/security.yml: Trivy at `severity: HIGH,CRITICAL` with `exit-code: 1`; Semgrep at ERROR threshold; Gitleaks fail-on-finding (`--exit-code 1`); jscpd at duplication threshold. CLAUDE.md §4 lists each as a merge gate. PowerShell itself does not have a separate `-W` flag concept — the equivalents above cover the static-analysis surface.",
+
+  "static_analysis_common_vulnerabilities_status": "Met",
+  "static_analysis_common_vulnerabilities_justification": "Semgrep `p/security-audit` covers common CWE patterns and `p/default` covers generic / GHA YAML rules — both run on every push + PR + weekly cron in .github/workflows/security.yml. CodeQL default setup (`actions`) at the repo level handles GitHub Actions workflow analysis. Together they cover the realistic attack surface for a single-user desktop PowerShell app (path traversal, command injection, GHA workflow misconfig).",
+
+  "static_analysis_often_status": "Met",
+  "static_analysis_often_justification": ".github/workflows/security.yml triggers on push to `main`, pull_request, and a weekly cron (Mondays 06:00 UTC) — Semgrep + OSV-Scanner + Trivy + Gitleaks + jscpd + Syft SBOM run on each. Scorecard runs weekly (Mondays 06:00 UTC) per .github/workflows/scorecard.yml. Therefore static analysis runs at least weekly and on every change.",
+
+  "dynamic_analysis_status": "?",
+  "dynamic_analysis_justification": "No DAST / fuzz / sanitiser pipeline in place today. Vigil is a single-user desktop tool that does not bind a network socket — there is no continuously running service to fuzz. Trivy filesystem scan covers configuration-level dynamic findings. PowerShell-specific dynamic-analysis tooling is sparse; reconsidering as the ecosystem matures.",
+
+  "dynamic_analysis_unsafe_status": "N/A",
+  "dynamic_analysis_unsafe_justification": "Vigil is written in PowerShell 7.5 (running on .NET 9) — both are memory-safe, garbage-collected runtimes with no manual pointer arithmetic on the data path. The criterion (memory-safety dynamic analysis) does not apply.",
+
+  "dynamic_analysis_enable_assertions_status": "?",
+  "dynamic_analysis_enable_assertions_justification": "Strict-mode assertions are not currently force-enabled (`Set-StrictMode -Version Latest`) in CI test invocations. PowerShell's strict mode is enabled per-script in VIGIL.ps1 / Test-Vigil.ps1 internals where it matters. To be reconsidered alongside any future runtime-analysis work."
+}
