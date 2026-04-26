@@ -27,7 +27,8 @@
   "license_location_url": "https://github.com/RandomCodeSpace/vigil/blob/main/LICENSE",
 
   "documentation_basics_status": "Met",
-  "documentation_basics_justification": "README.md covers what vigil is, requirements (Windows 10/11, PowerShell 7.5+, .NET 9, optional Outlook), how to run, and how to test. CLAUDE.md §3 documents the repository shape (VIGIL.ps1, preflight.ps1, Test-Vigil.ps1, .vigil/) and §1 the product target. SECURITY.md documents the disclosure policy.",
+  "documentation_basics_justification": "Dedicated `docs/` folder at repo root collects the structured documentation: docs/README.md (index), docs/architecture.md (5-phase startup, repository shape, runtime invariants, stack), docs/install.md (system requirements, run + flags, tests, update path, uninstall), docs/troubleshooting.md (preflight bitmap decoding, CLM / AppLocker / AMSI / EDR blockers, DPAPI store recovery, single-instance mutex), and docs/security.md (threat model, hardened invariants, crypto, distribution integrity). README.md is the user-facing landing page; CLAUDE.md §3 documents the repository shape; SECURITY.md documents the disclosure policy.",
+  "documentation_basics_url": "https://github.com/RandomCodeSpace/vigil/tree/main/docs",
 
   "documentation_interface_status": "Met",
   "documentation_interface_justification": "README.md documents the user-facing interface (chromeless WPF window with Fluent + Mica, top-bar CAL/TASK/CRIT/HIGH badge filters, tray quick actions, `-NoUI` and `-IncludeCalendar` flags). CLAUDE.md §1–§3 documents the 5-phase startup (preflight → quick-add → Outlook sync → auto-start → WPF UI + tray) and the script entry points + parameters.",
@@ -53,11 +54,13 @@
   "version_unique_status": "Met",
   "version_unique_justification": "Each commit on `main` is uniquely identified by its Git SHA (full revision history is the version manifest). Distribution is `git clone` + `pwsh -File .\\VIGIL.ps1`, so users pin to an exact commit SHA. SECURITY.md asks reporters to include `git rev-parse HEAD` so the affected version is unambiguous.",
 
-  "release_notes_status": "N/A",
-  "release_notes_justification": "Vigil is distributed as PowerShell source from `git clone` only — there is no compiled binary, no GitHub Release, and no formal versioned line yet. SECURITY.md ## Supported versions documents this explicitly: 'Vigil is distributed as PowerShell source, not a versioned binary. Security fixes land on `main` and are tagged when material.' Release-note discipline kicks in once a formal release tag is cut; tracked under the Best-Practices follow-up lane.",
+  "release_notes_status": "Met",
+  "release_notes_justification": "CHANGELOG.md at repo root tracks all notable changes in Keep-a-Changelog 1.1.0 format. Pre-1.0 distribution is `git clone` of `main` (no compiled binary, no GitHub Release line yet), so the canonical version identifier is the commit SHA on `main` and CHANGELOG ## [Unreleased] catalogues what has landed since the last reference point. Sections covered: Added, Fixed, Changed, Security. Each entry cross-links the Paperclip ticket (RAN-XX). When the first tagged release is cut the [Unreleased] section will be rolled into a versioned heading per the same format.",
+  "release_notes_url": "https://github.com/RandomCodeSpace/vigil/blob/main/CHANGELOG.md",
 
-  "release_notes_vulns_status": "N/A",
-  "release_notes_vulns_justification": "Same N/A rationale as `release_notes` — vigil has no formal release line yet, so there are no per-release notes in which to enumerate fixed vulnerabilities. SECURITY.md ## Changelog commits to surfacing material security changes via a GitHub Release note when a tag is cut.",
+  "release_notes_vulns_status": "Met",
+  "release_notes_vulns_justification": "CHANGELOG.md ## Security section is the dedicated lane for vulnerability-related entries — currently lists adoption of the (B) OSS-CLI security stack as the continuous supply-chain observability surface. Future fixed CVEs will be enumerated in the same section, cross-referencing the GHSA advisory ID where one is published. Pre-1.0 the entry lives under [Unreleased] ## Security; once a tagged line exists each release block carries its own ## Security subsection.",
+  "release_notes_vulns_url": "https://github.com/RandomCodeSpace/vigil/blob/main/CHANGELOG.md#security",
 
   "report_process_status": "Met",
   "report_process_justification": "SECURITY.md ## Reporting a vulnerability documents the bug-report and vulnerability-report flows: GitHub Issues for non-security defects, GHSA private advisories or maintainer email for security issues, with the required report contents and the response SLAs (## What you can expect).",
