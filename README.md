@@ -1,5 +1,8 @@
 # VIGIL
 
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/12648/badge)](https://www.bestpractices.dev/projects/12648)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/RandomCodeSpace/vigil/badge)](https://scorecard.dev/viewer/?uri=github.com/RandomCodeSpace/vigil)
+
 Personal task command center for Windows. Single-file PowerShell + WPF app with
 a chromeless Fluent window, Outlook sync, and a system tray icon.
 

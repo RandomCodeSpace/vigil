@@ -1,0 +1,60 @@
+{
+  "$schema": "https://bestpractices.coreinfrastructure.org/projects.schema.json",
+  "_comment": "OpenSSF Best Practices self-assessment for RandomCodeSpace/vigil. Project page: https://www.bestpractices.dev/en/projects/12648. RAN-55 — board pre-registered the project; flipping `badge_level` from `in_progress` to `passing` is admin-UI work on bestpractices.dev and is board-owned (matches the codeiq RAN-46 / RAN-52 pattern).",
+  "project_id": 12648,
+  "name": "vigil",
+  "description": "Personal task command center for Windows. Single-file PowerShell + WPF (Fluent / Mica) desktop app with Outlook sync, system tray icon, and DPAPI-wrapped local storage. Single-user, MIT-licensed, no compiled binary distribution.",
+  "homepage_url": "https://github.com/RandomCodeSpace/vigil",
+  "repo_url": "https://github.com/RandomCodeSpace/vigil",
+  "license": "MIT",
+  "level": "passing",
+  "status": {
+    "basics": "self-assessed-passing",
+    "change_control": "self-assessed-passing",
+    "reporting": "self-assessed-passing",
+    "quality": "self-assessed-passing",
+    "security": "self-assessed-passing",
+    "analysis": "self-assessed-passing"
+  },
+  "evidence": {
+    "vulnerability_report_process": "SECURITY.md",
+    "engineering_standards": "CLAUDE.md",
+    "agent_collaborator_entrypoint": "AGENTS.md",
+    "license_file": "LICENSE",
+    "build_reproducible": "No build step — distribution is `git clone` + `pwsh -NoProfile -File ./VIGIL.ps1`. Test harness is `pwsh -NoProfile -File ./Test-Vigil.ps1`.",
+    "ci_workflow": ".github/workflows/security.yml (OSS-CLI stack: Semgrep / OSV-Scanner / Trivy / Gitleaks / jscpd / Syft SBOM)",
+    "code_scanning": "Semgrep SAST in security.yml; GitHub repo-level CodeQL default setup (`actions` language) for the GitHub Actions YAML — board-owned toggle in repo Settings → Code security → Code scanning. PowerShell language is not supported by CodeQL default setup.",
+    "supply_chain_scorecard": ".github/workflows/scorecard.yml",
+    "dependency_updates": ".github/dependabot.yml (github-actions ecosystem only — Vigil ships no language lockfile, no Maven / npm / pip surface)",
+    "signed_commits": "Branch protection on `main` requires signed commits. Board-owned toggle in repo Settings → Branches.",
+    "secret_scanning": "GitHub repo-level secret scanning + push protection. Board-owned toggle in repo Settings → Code security. Cross-checked weekly by Gitleaks in .github/workflows/security.yml.",
+    "static_analysis": "Semgrep (p/default + p/security-audit) in .github/workflows/security.yml.",
+    "vulnerability_scanning": "OSV-Scanner + Trivy filesystem scan in .github/workflows/security.yml; Dependabot security updates (board-owned repo toggle) for GitHub Actions ecosystem."
+  },
+  "audit": {
+    "self_assessment_date": "2026-04-26",
+    "self_assessment_author": "TechLead (RAN-55)",
+    "registration_blocker": null,
+    "passing_blocker": "Final flip from `in_progress` to `passing` happens in the bestpractices.dev admin UI; tracked under RAN-55 acceptance criteria. The board-owned repo toggles (signed-commit branch protection, secret scanning + push protection, Dependabot security updates) need to be enabled before flip.",
+    "stack": {
+      "primary_language": "PowerShell 7.5+",
+      "legacy_fallback": "Windows PowerShell 5.1 (data layer only)",
+      "runtime": ".NET 9",
+      "ui": "WPF / Fluent / Mica (Windows-only)",
+      "external_integration": "Outlook COM",
+      "package_managers": [],
+      "build_system": "none — no compile step"
+    },
+    "scorecard_target": {
+      "policy": "observational only — does not gate merge per board ruling",
+      "stretch_aggregate": "8.0/10",
+      "priority_checks": [
+        "Pinned-Dependencies",
+        "Branch-Protection",
+        "Token-Permissions",
+        "Dangerous-Workflow",
+        "SAST"
+      ]
+    }
+  }
+}
