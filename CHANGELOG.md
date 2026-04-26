@@ -8,6 +8,14 @@ While Vigil remains pre-1.0 and distributed as PowerShell source from `git clone
 
 ## [Unreleased]
 
+_No unreleased changes yet. Material changes since v0.1.0 will be listed here._
+
+## [0.1.0] - 2026-04-26
+
+Initial public release. Establishes the OpenSSF Best Practices `passing` baseline, the (B) OSS-CLI continuous supply-chain observability stack, and the deep-review fixes accumulated since the project went public on GitHub.
+
+This is the first tagged release line for Vigil; from this point on, every notable change is recorded under a versioned heading and the project follows [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html). The commit at the `v0.1.0` tag is the canonical release artefact — distribution remains `git clone` + `git checkout v0.1.0` + `pwsh -File .\VIGIL.ps1`.
+
 ### Added
 
 - **OpenSSF Best Practices + Scorecard scaffolding** ([RAN-55], [RAN-60]).
@@ -37,6 +45,7 @@ While Vigil remains pre-1.0 and distributed as PowerShell source from `git clone
 - Adopted the (B) OSS-CLI security stack as the project's continuous supply-chain observability surface. High/Critical findings are merge gates per `CLAUDE.md` §7. SARIF results land in the GitHub Security tab where supported and are uploaded as workflow artifacts regardless.
 - Branch protection on `main` (signed commits, required PR review, required status checks) and repo-level secret scanning + push protection are board-owned toggles tracked alongside [RAN-55] until enabled.
 
-[Unreleased]: https://github.com/RandomCodeSpace/vigil/commits/main
+[Unreleased]: https://github.com/RandomCodeSpace/vigil/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/RandomCodeSpace/vigil/releases/tag/v0.1.0
 [RAN-55]: https://github.com/RandomCodeSpace/vigil/issues
 [RAN-60]: https://github.com/RandomCodeSpace/vigil/issues

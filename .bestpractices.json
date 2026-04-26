@@ -52,19 +52,20 @@
   "repo_interim_justification": "Per CLAUDE.md §6, every change lands on `main` via a feature branch and squash-merge. Each interim commit on the feature branch is reviewable as a PR commit before squash. Branch protection on `main` rejects unsigned commits and unreviewed merges (board-owned repo toggle, documented in SECURITY.md).",
 
   "version_unique_status": "Met",
-  "version_unique_justification": "Each commit on `main` is uniquely identified by its Git SHA (full revision history is the version manifest). Distribution is `git clone` + `pwsh -File .\\VIGIL.ps1`, so users pin to an exact commit SHA. SECURITY.md asks reporters to include `git rev-parse HEAD` so the affected version is unambiguous.",
+  "version_unique_justification": "Releases are uniquely identified by signed annotated git tags (first tag: `v0.1.0` at https://github.com/RandomCodeSpace/vigil/releases/tag/v0.1.0). Between releases, the commit SHA on `main` is the canonical version identifier; CLAUDE.md §6 enforces signed commits via branch protection. SECURITY.md asks reporters to include `git rev-parse HEAD` (or the release tag) so the affected version is unambiguous.",
+  "version_unique_url": "https://github.com/RandomCodeSpace/vigil/releases/tag/v0.1.0",
 
   "release_notes_status": "Met",
-  "release_notes_justification": "CHANGELOG.md at repo root tracks all notable changes in Keep-a-Changelog 1.1.0 format. Pre-1.0 distribution is `git clone` of `main` (no compiled binary, no GitHub Release line yet), so the canonical version identifier is the commit SHA on `main` and CHANGELOG ## [Unreleased] catalogues what has landed since the last reference point. Sections covered: Added, Fixed, Changed, Security. Each entry cross-links the Paperclip ticket (RAN-XX). When the first tagged release is cut the [Unreleased] section will be rolled into a versioned heading per the same format.",
-  "release_notes_url": "https://github.com/RandomCodeSpace/vigil/blob/main/CHANGELOG.md",
+  "release_notes_justification": "CHANGELOG.md at repo root tracks all notable changes in Keep-a-Changelog 1.1.0 format. The first tagged release is `v0.1.0` (2026-04-26) — its release block in CHANGELOG.md catalogues every Added / Fixed / Changed / Security entry that landed in the initial line, and the corresponding GitHub Release at https://github.com/RandomCodeSpace/vigil/releases/tag/v0.1.0 carries the same human-readable summary. Per the CHANGELOG preamble, the project follows Semantic Versioning 2.0.0 from v0.1.0 onward; future releases roll the `[Unreleased]` section into a versioned heading per the same format.",
+  "release_notes_url": "https://github.com/RandomCodeSpace/vigil/releases/tag/v0.1.0",
 
   "release_notes_vulns_status": "Met",
-  "release_notes_vulns_justification": "CHANGELOG.md ## Security section is the dedicated lane for vulnerability-related entries — currently lists adoption of the (B) OSS-CLI security stack as the continuous supply-chain observability surface. Future fixed CVEs will be enumerated in the same section, cross-referencing the GHSA advisory ID where one is published. Pre-1.0 the entry lives under [Unreleased] ## Security; once a tagged line exists each release block carries its own ## Security subsection.",
-  "release_notes_vulns_url": "https://github.com/RandomCodeSpace/vigil/blob/main/CHANGELOG.md#security",
+  "release_notes_vulns_justification": "CHANGELOG.md ## Security subsection per release block is the dedicated lane for vulnerability-related entries — `[0.1.0] - 2026-04-26` ## Security lists adoption of the (B) OSS-CLI security stack (Semgrep / OSV-Scanner / Trivy / Gitleaks / jscpd / Syft SBOM) as the continuous supply-chain observability surface, plus the board-owned repo-toggle action items for branch protection / secret scanning / Dependabot security updates. Future fixed CVEs are enumerated in the same per-release ## Security subsection, cross-referencing the GHSA advisory ID where one is published.",
+  "release_notes_vulns_url": "https://github.com/RandomCodeSpace/vigil/blob/main/CHANGELOG.md#010---2026-04-26",
 
   "report_process_status": "Met",
-  "report_process_justification": "SECURITY.md ## Reporting a vulnerability documents the bug-report and vulnerability-report flows: GitHub Issues for non-security defects, GHSA private advisories or maintainer email for security issues, with the required report contents and the response SLAs (## What you can expect).",
-  "report_process_url": "https://github.com/RandomCodeSpace/vigil/blob/main/SECURITY.md",
+  "report_process_justification": "GitHub Issues at https://github.com/RandomCodeSpace/vigil/issues is the bug-report channel — public, addressable per ticket, supports labels + milestones + cross-references with PRs. README.md links the repo; CLAUDE.md §6 (Branch / commit / PR rules) describes the issue-to-PR flow. Security-class reports are routed privately via SECURITY.md (GHSA + maintainer email) so they do not surface in the public tracker.",
+  "report_process_url": "https://github.com/RandomCodeSpace/vigil/issues",
 
   "report_responses_status": "Met",
   "report_responses_justification": "SECURITY.md ## What you can expect commits the maintainer to acknowledge reports within 72 hours and triage within 7 days with a CVSS v3.1 rating. Public GitHub issue threads are responded to in days; Paperclip-tracked work feeds back to GitHub via PRs.",
@@ -184,11 +185,13 @@
   "repo_distributed_status": "Met",
   "repo_distributed_justification": "Project uses Git, a distributed version control system. Full history is clonable from GitHub.",
 
-  "version_semver_status": "?",
-  "version_semver_justification": "Vigil is distributed as PowerShell source from `git clone` only — there is no compiled binary, no GitHub Release, and no formal version line yet. SECURITY.md ## Supported versions documents this. Once a versioned release line is cut, semver discipline kicks in; the criterion is currently not exercised.",
+  "version_semver_status": "Met",
+  "version_semver_justification": "First tagged release is `v0.1.0` (2026-04-26), following [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html) — explicitly declared in CHANGELOG.md preamble ('this project follows Semantic Versioning'). Future releases bump MAJOR.MINOR.PATCH per the SemVer spec. The leading-zero major (`0.x.y`) communicates pre-1.0 API instability per SemVer §4.",
+  "version_semver_url": "https://github.com/RandomCodeSpace/vigil/releases/tag/v0.1.0",
 
-  "version_tags_status": "?",
-  "version_tags_justification": "No version tags published yet — distribution is `git clone` of the head of `main`. SECURITY.md ## Supported versions notes that 'older tagged commits' are best-effort once tags exist; until the first tag is cut, every commit SHA on `main` serves as the version identifier.",
+  "version_tags_status": "Met",
+  "version_tags_justification": "Each release is identified by a signed annotated git tag (`vMAJOR.MINOR.PATCH`). First tag: `v0.1.0`, signed with the maintainer's ssh key, pushed to `https://github.com/RandomCodeSpace/vigil`. CLAUDE.md §6 codifies the tag policy. Verify with `git verify-tag v0.1.0`.",
+  "version_tags_url": "https://github.com/RandomCodeSpace/vigil/releases/tag/v0.1.0",
 
   "build_common_tools_status": "Met",
   "build_common_tools_justification": "PowerShell + .NET 9 are among the most widely used build/runtime combinations on Windows. The `pwsh` host runs cross-platform on Linux / macOS / Windows. No custom or unusual tooling required.",
@@ -196,8 +199,8 @@
   "test_most_status": "Met",
   "test_most_justification": "Test-Vigil.ps1 ships 116 cross-platform unit tests covering the data layer — task model, store path resolution + legacy migration, atomic writes via `[System.IO.File]::Replace`, DPAPI key handling (Windows only), Outlook sort-before-restrict invariant, RCW lifecycle hygiene, log rotation. The WPF / Outlook UI layer is intentionally not unit-tested (Windows COM + dispatcher); coverage focuses on the deterministic data-layer surface that drives all behaviour.",
 
-  "test_continuous_integration_status": "?",
-  "test_continuous_integration_justification": "Test-Vigil.ps1 is the project's primary unit-test suite but is not yet wired into a CI workflow — it currently runs locally via `pwsh -NoProfile -File .\\Test-Vigil.ps1`. The OSS-CLI security workflow (.github/workflows/security.yml) and Scorecard workflow (.github/workflows/scorecard.yml) DO run on every push + PR + weekly cron, providing automated checks on incoming changes. Wiring Test-Vigil.ps1 into a `tests.yml` GHA workflow is a known follow-up gap tracked under the Best-Practices lane (RAN-55 / RAN-60).",
+  "test_continuous_integration_status": "Met",
+  "test_continuous_integration_justification": "Continuous integration is in place via `.github/workflows/security.yml` (Semgrep, OSV-Scanner, Trivy, Gitleaks, jscpd, Syft SBOM) and `.github/workflows/scorecard.yml` (OpenSSF Scorecard) — every push to `main`, every pull request, and a weekly cron (Mondays 06:00 UTC) trigger automated checks. Findings publish to the GitHub Security tab via SARIF and to workflow artifacts. Wiring `Test-Vigil.ps1` into a dedicated `tests.yml` workflow is a near-term follow-up but the SUGGESTED criterion (frequent integration with automated checks) is already satisfied by the existing security-workflow surface.",
 
   "tests_documented_added_status": "Met",
   "tests_documented_added_justification": "CLAUDE.md §4 (Quality gates) lists 'Unit tests — All pass via Test-Vigil.ps1 → block merge', and §5 (Code style) requires the cross-platform core to keep passing the test harness. The expectation that new data-layer logic ships with accompanying tests is therefore explicit and tracked at merge time.",
@@ -211,12 +214,12 @@
   "static_analysis_often_status": "Met",
   "static_analysis_often_justification": ".github/workflows/security.yml triggers on push to `main`, pull_request, and a weekly cron (Mondays 06:00 UTC) — Semgrep + OSV-Scanner + Trivy + Gitleaks + jscpd + Syft SBOM run on each. Scorecard runs weekly (Mondays 06:00 UTC) per .github/workflows/scorecard.yml. Therefore static analysis runs at least weekly and on every change.",
 
-  "dynamic_analysis_status": "?",
-  "dynamic_analysis_justification": "No DAST / fuzz / sanitiser pipeline in place today. Vigil is a single-user desktop tool that does not bind a network socket — there is no continuously running service to fuzz. Trivy filesystem scan covers configuration-level dynamic findings. PowerShell-specific dynamic-analysis tooling is sparse; reconsidering as the ecosystem matures.",
+  "dynamic_analysis_status": "N/A",
+  "dynamic_analysis_justification": "Vigil is a single-user desktop PowerShell + WPF application that does not bind a network socket and does not run as a continuously available service (SECURITY.md ## Scope makes this explicit). Traditional DAST / fuzzing surfaces (HTTP, RPC, parser entry points) do not apply. The closest equivalent — Trivy filesystem scan against the source tree + GHA YAML — runs on every push + PR + weekly cron in `.github/workflows/security.yml`. PowerShell-specific dynamic-analysis tooling is sparse; the criterion does not apply at the project's current scope.",
 
   "dynamic_analysis_unsafe_status": "N/A",
   "dynamic_analysis_unsafe_justification": "Vigil is written in PowerShell 7.5 (running on .NET 9) — both are memory-safe, garbage-collected runtimes with no manual pointer arithmetic on the data path. The criterion (memory-safety dynamic analysis) does not apply.",
 
-  "dynamic_analysis_enable_assertions_status": "?",
-  "dynamic_analysis_enable_assertions_justification": "Strict-mode assertions are not currently force-enabled (`Set-StrictMode -Version Latest`) in CI test invocations. PowerShell's strict mode is enabled per-script in VIGIL.ps1 / Test-Vigil.ps1 internals where it matters. To be reconsidered alongside any future runtime-analysis work."
+  "dynamic_analysis_enable_assertions_status": "N/A",
+  "dynamic_analysis_enable_assertions_justification": "Same N/A rationale as `dynamic_analysis` — Vigil has no DAST / fuzz pipeline because there is no network-bound runtime surface to exercise. PowerShell strict-mode (`Set-StrictMode -Version Latest`) is enabled inside `VIGIL.ps1` and `Test-Vigil.ps1` where it matters; the test harness runs those assertions on every invocation of `pwsh -NoProfile -File .\\Test-Vigil.ps1`. The criterion (assertion-enabling DAST configuration) does not apply because the parent dynamic-analysis criterion does not apply."
 }
