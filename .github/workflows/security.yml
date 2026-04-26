@@ -110,9 +110,17 @@ jobs:
           category: semgrep
 
   # ------------------------------------------------------------------
-  # OSV-Scanner — second-source CVE feed. Vigil currently has no
-  # language lockfile to scan, so this run is largely informational —
-  # the value is automatic coverage if a lockfile is ever added.
+  # OSV-Scanner — second-source CVE feed. Installed from the official
+  # GitHub release as a binary; we do NOT use `google/osv-scanner-action`
+  # because its `action.yml` is composite-only and missing the top-level
+  # `runs:` block, which causes the action to fail with "Top level 'runs:'
+  # section is required" when invoked as a job step. Same fix codeiq landed
+  # on its own RAN-52 follow-up. Using the preinstalled `gh` CLI avoids
+  # any external `curl`/`wget` per /home/dev/.claude/CLAUDE.md.
+  #
+  # Vigil currently has no language lockfile to scan, so the recursive
+  # source scan exits with no findings today. Coverage flips on
+  # automatically the moment a `*.lock` lands in-tree.
   # ------------------------------------------------------------------
   osv-scanner:
     name: OSV-Scanner deps
@@ -120,6 +128,11 @@ jobs:
     permissions:
       contents: read
       security-events: write
+    env:
+      OSV_SCANNER_VERSION: 2.3.5
+      # `gh release download` needs an auth token; the default GITHUB_TOKEN
+      # (read-only, contents:read) is sufficient for public-asset downloads.
+      GH_TOKEN: ${{ github.token }}
     steps:
       - name: Harden runner egress
         uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40
@@ -131,17 +144,33 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Run OSV-Scanner
-        # google/osv-scanner-action v2.3.5
-        uses: google/osv-scanner-action@c51854704019a247608d928f370c98740469d4b5
-        with:
-          scan-args: |-
-            --recursive
-            --skip-git
-            --format=sarif
-            --output=osv.sarif
-            ./
-        continue-on-error: true
+      - name: Install osv-scanner
+        # `gh release download --output` is honoured only when downloading a
+        # single asset via `--archive` or by exact name; with `--pattern` the
+        # asset is written to the current dir at its source name. Download
+        # then move to a stable name. The `--version` smoke step makes any
+        # future regression surface as a clear error rather than `exit 127`.
+        run: |
+          gh release download "v${OSV_SCANNER_VERSION}" \
+            --repo google/osv-scanner \
+            --pattern 'osv-scanner_linux_amd64' \
+            --clobber
+          mv osv-scanner_linux_amd64 osv-scanner
+          chmod +x osv-scanner
+          ./osv-scanner --version
+
+      - name: Run osv-scanner
+        # Recursive source scan. Vigil has no language lockfile today, so
+        # this exits cleanly with no findings; coverage activates the
+        # moment a `*.lock` is added in-tree. Observation-only at the
+        # OSS-CLI bootstrap window.
+        run: |
+          ./osv-scanner \
+            --recursive \
+            --skip-git \
+            --format=sarif \
+            --output=osv.sarif \
+            ./ || true
 
       - name: Upload OSV SARIF (artifact)
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
